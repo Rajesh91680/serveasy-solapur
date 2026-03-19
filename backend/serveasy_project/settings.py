@@ -20,7 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-%fdz3jg&4hgz_md8f=c1f0hm*_*$q9zk2^v1$%f9!d1ix2w)ln'
+SECRET_KEY = 'django-insecure-6k=2_82et=fe+%on7is=f1p!)05etgv#+w!imbfqy^jx!qaa6#'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -77,12 +77,12 @@ WSGI_APPLICATION = 'serveasy_project.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'serveasy_db',
-        'USER': 'serveasy_user',
+        'ENGINE':   'django.db.backends.postgresql',
+        'NAME':     'serveasy_db',
+        'USER':     'serveasy_user',
         'PASSWORD': 'Serveasy@123',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'HOST':     'localhost',
+        'PORT':     '5432',
     }
 }
 
