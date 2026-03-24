@@ -1,24 +1,91 @@
-# models.py
-# This file defines the database table structure for the ServeEasy project.
-# Django reads this file and creates the actual table in PostgreSQL.
-# Member 1 - Authentication & Profile
-
 from django.db import models
 
+
+# -------------------------
+# User Model
+# -------------------------
 class User(models.Model):
-    name         = models.CharField(max_length=100)
-    phone        = models.CharField(max_length=15, unique=True)
-    email        = models.EmailField(unique=True)
-    password     = models.CharField(max_length=255)
-    title        = models.CharField(max_length=50, blank=True)
+    name = models.CharField(max_length=100)
+    phone = models.CharField(max_length=15, unique=True)
+    email = models.EmailField(unique=True)
+    password = models.CharField(max_length=255)
+    title = models.CharField(max_length=50, blank=True)
     address_line = models.TextField(blank=True)
-    city         = models.CharField(max_length=100, blank=True)
-    area         = models.CharField(max_length=100, blank=True)
-    pin_code     = models.CharField(max_length=10, blank=True)
-    created_at   = models.DateTimeField(auto_now_add=True)
+    city = models.CharField(max_length=100, blank=True)
+    area = models.CharField(max_length=100, blank=True)
+    pin_code = models.CharField(max_length=10, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
 
     class Meta:
         db_table = 'users'
 
+
+# -------------------------
+# Address Model (UPDATED ✅)
+# -------------------------
+class Address(models.Model):
+    ADDRESS_TYPE_CHOICES = [
+        ('home', 'Home'),
+        ('office', 'Office'),
+        ('other', 'Other'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='addresses')
+    address_type = models.CharField(max_length=10, choices=ADDRESS_TYPE_CHOICES, default='home')
+    address_line1 = models.CharField(max_length=255)
+    address_line2 = models.CharField(max_length=255, blank=True, default='')
+    area = models.CharField(max_length=100, blank=True, default='')
+    city = models.CharField(max_length=100, default='Solapur')
+    pincode = models.CharField(max_length=10)
+    is_default = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.name} - {self.address_type.capitalize()} - {self.city}"
+
+    class Meta:
+        db_table = 'address'
+        ordering = ['-created_at']
+
+
+# -------------------------
+# Service Model
+# -------------------------
+class Service(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    icon = models.CharField(max_length=100, blank=True)
+    image_url = models.URLField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
     def __str__(self):
         return self.name
+
+    class Meta:
+        db_table = 'service'
+
+
+# -------------------------
+# Provider Model
+# -------------------------
+class Provider(models.Model):
+    service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name='providers')
+    name = models.CharField(max_length=100)
+    rating = models.FloatField(default=0.0)
+    experience = models.IntegerField(default=0)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    location = models.CharField(max_length=255)
+    phone = models.CharField(max_length=15)
+    avatar_url = models.URLField(blank=True, null=True)
+    is_verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} - {self.service.name}"
+
+    class Meta:
+        db_table = 'provider'
