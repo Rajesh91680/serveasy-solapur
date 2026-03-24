@@ -1,4 +1,6 @@
 # models.py
+#This file uses Django ORM written in Python.
+# we write a Python class and Django automatically creates the table in PostgreSQL.
 # This file defines the database table structure for the ServeEasy project.
 # Django reads this file and creates the actual table in PostgreSQL.
 # Member 1 - Authentication & Profile

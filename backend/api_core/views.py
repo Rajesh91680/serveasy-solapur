@@ -3,6 +3,11 @@
 # It receives the request, processes it, talks to the database, and returns a response.
 # Member 1 - Authentication & Profile
 
+# ORM (Object Relational Mapping):
+# This file uses Django ORM written in Python to perform database operations.
+# Instead of writing raw SQL queries, we use Python methods provided by Django ORM.
+# Language used: Python (Django ORM)
+
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
