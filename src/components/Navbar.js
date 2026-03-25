@@ -89,19 +89,13 @@ export function Navbar() {
           ) : (
             <div className="flex items-center gap-3">
               <button
-                onClick={() => navigate("/login")}
+                onClick={() => window.dispatchEvent(new CustomEvent("openAuth", { detail: { mode: "login" } }))}
                 className="px-5 py-2 rounded-lg font-semibold text-white"
                 style={{ background: "#F97316" }}
               >
-                Login
+                Login/Sign up
               </button>
-              <button
-                onClick={() => navigate("/signup")}
-                className="px-5 py-2 rounded-lg font-semibold border-2"
-                style={{ borderColor: "#1A3C6E", color: "#1A3C6E" }}
-              >
-                Sign Up
-              </button>
+
             </div>
           )}
         </div>

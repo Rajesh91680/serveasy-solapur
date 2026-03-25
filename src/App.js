@@ -10,7 +10,7 @@ import ProviderAccepted from "./components/pages/user/ProviderAccepted";
 import ServiceCompleted from "./components/pages/user/ServiceCompleted";
 import { UserProfile } from "./components/pages/user/UserProfile";
 import { AddressSelectPage } from "./components/pages/user/auth/AddressSelectPopup";
-import { AuthModal } from "./components/auth/AuthModal";
+import AuthModal from "./components/auth/AuthModal";
 
 /* ADMIN */
 import AdminLayout from "./components/pages/admin/AdminLayout";
@@ -29,34 +29,21 @@ import AdminRatings from "./components/pages/admin/AdminRatings";
  * AppContent — Handles the main routing and Modal background logic
  */
 function AppContent() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  
-  // This state allows us to keep the background page rendered when we are on /login or /signup
-  const [background, setBackground] = useState(null);
+  const [showAuth, setShowAuth] = useState(false);
+  const [authInitialMode, setAuthInitialMode] = useState("login");
 
-  // When we go to /login or /signup, we want to remember what was there before
   useEffect(() => {
-    if (location.pathname === "/login" || location.pathname === "/signup") {
-      if (!background) {
-        // Find a suitable background (previous location or home)
-        setBackground(location.state?.backgroundLocation || { pathname: "/" });
-      }
-    } else {
-      setBackground(null);
-    }
-  }, [location.pathname, background]);
-
-  const handleClose = () => {
-    const prev = background?.pathname || "/";
-    navigate(prev);
-  };
-
-  const authMode = location.pathname === "/login" ? "login" : location.pathname === "/signup" ? "signup" : null;
+    const handleOpenAuth = (e) => {
+      if (e.detail?.mode) setAuthInitialMode(e.detail.mode);
+      setShowAuth(true);
+    };
+    window.addEventListener("openAuth", handleOpenAuth);
+    return () => window.removeEventListener("openAuth", handleOpenAuth);
+  }, []);
 
   return (
     <div className="app-container">
-      <Routes location={background || location}>
+      <Routes>
         {/* USER */}
         <Route path="/" element={<Home />} />
         <Route path="/address-select" element={<AddressSelectPage />} />
@@ -66,6 +53,10 @@ function AppContent() {
         <Route path="/provider-accepted" element={<ProviderAccepted />} />
         <Route path="/service-completed" element={<ServiceCompleted />} />
         <Route path="/profile" element={<UserProfile />} />
+
+        {/* Standalone Auth Pages (kept as fallback or just redirected) */}
+        <Route path="/login" element={<Home />} />
+        <Route path="/signup" element={<Home />} />
 
         {/* ADMIN LOGIN */}
         <Route path="/admin/login" element={<AdminLogin />} />
@@ -84,8 +75,12 @@ function AppContent() {
         </Route>
       </Routes>
       
-      {/* The Auth Modal is managed globally here */}
-      <AuthModal isOpen={!!authMode} onClose={handleClose} initialMode={authMode || "login"} />
+      {/* AuthModal managed globally via event state */}
+      <AuthModal 
+        isOpen={showAuth} 
+        onClose={() => setShowAuth(false)} 
+        initialMode={authInitialMode} 
+      />
     </div>
   );
 }

@@ -470,7 +470,7 @@ export function ProviderList() {
 
     if (!currentUser) {
       sessionStorage.setItem("pendingProviderSelection", JSON.stringify(bookingData));
-      navigate("/login");
+      window.dispatchEvent(new CustomEvent("openAuth", { detail: { mode: "login" } }));
       return;
     }
 
@@ -539,7 +539,11 @@ export function ProviderList() {
             const p = reviewProvider;
             const desc = ps[p.id]?.description?.trim() || state?.description || "";
             const bookingData = { service: state?.service || "General Service", address: selectedAddress, description: desc, date: state?.date || new Date().toLocaleDateString(), time: state?.time || "ASAP", providers: [p.name], bookingId: `BK${Date.now().toString().slice(-6)}` };
-            if (!currentUser) { sessionStorage.setItem("pendingProviderSelection", JSON.stringify(bookingData)); navigate("/login"); return; }
+            if (!currentUser) { 
+              sessionStorage.setItem("pendingProviderSelection", JSON.stringify(bookingData)); 
+              window.dispatchEvent(new CustomEvent("openAuth", { detail: { mode: "login" } }));
+              return; 
+            }
             // addBooking({ userId: currentUser.id, userName: currentUser.name, userEmail: currentUser.email, ...bookingData, status: "requested" });
             navigate("/booking-request", { state: { ...state, ...bookingData } });
           }} />

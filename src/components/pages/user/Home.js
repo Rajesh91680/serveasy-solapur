@@ -97,7 +97,7 @@ export function Home() {
         'pendingHomeService',
         JSON.stringify({ serviceId })
       );
-      navigate("/login");
+      window.dispatchEvent(new CustomEvent("openAuth", { detail: { mode: "login" } }));
       return;
     }
 
@@ -117,7 +117,7 @@ export function Home() {
         'pendingHomeService',
         JSON.stringify({ serviceId: sel })
       );
-      navigate("/login");
+      window.dispatchEvent(new CustomEvent("openAuth", { detail: { mode: "login" } }));
       return;
     }
 
