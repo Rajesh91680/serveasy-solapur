@@ -1,46 +1,68 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Star, MapPin } from "lucide-react";
-import { getProviders, saveProviders } from "../../../services/store";
 
 function AdminProviders() {
   const navigate = useNavigate();
 
-  const [providers, setProviders] = useState(getProviders());
+  const [providers, setProviders] = useState([]);
   const [search, setSearch] = useState("");
 
+  // ================= LOAD PROVIDERS =================
+  useEffect(() => {
+    loadProviders();
+  }, []);
+
+  const loadProviders = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/providers");
+      const data = await res.json();
+
+      console.log("PROVIDERS:", data); // 🔥 DEBUG
+
+      setProviders(data); // ✅ simple & correct
+    } catch (error) {
+      console.error("Error fetching providers:", error);
+    }
+  };
+
+  // ================= FILTER =================
   const filtered = providers.filter(
     (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.specialty.toLowerCase().includes(search.toLowerCase())
+      (p.name || "").toLowerCase().includes(search.toLowerCase()) ||
+      (p.specialty || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  const toggle = (id) => {
-    const updated = providers.map((p) =>
-      p.id === id
-        ? { ...p, status: p.status === "active" ? "inactive" : "active" }
-        : p
-    );
+  // ================= TOGGLE STATUS =================
+  const toggle = async (id) => {
+    try {
+      const provider = providers.find((p) => p.id === id);
 
-    saveProviders(updated);
-    setProviders(updated);
+      await fetch(`http://127.0.0.1:8000/api/providers/${id}/update`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...provider,
+          status: provider.status === "active" ? "inactive" : "active",
+        }),
+      });
+
+      loadProviders(); // refresh after toggle
+    } catch (error) {
+      console.error("Error updating provider:", error);
+    }
   };
 
   return (
-    <div>
-      {/* Header */}
+    <div className="p-6 bg-gray-50 min-h-screen">
+
+      {/* HEADER */}
       <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1
-            style={{
-              color: "#1A3C6E",
-              fontSize: "28px",
-              fontWeight: 700,
-            }}
-          >
-            Service Providers
-          </h1>
-        </div>
+        <h1 style={{ color: "#1A3C6E", fontSize: "28px", fontWeight: 700 }}>
+          Service Providers
+        </h1>
 
         <button
           onClick={() => navigate("/admin/providers/add")}
@@ -52,14 +74,12 @@ function AdminProviders() {
         </button>
       </div>
 
-      {/* Card */}
-      <div
-        className="bg-white rounded-xl overflow-hidden"
-        style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.06)" }}
-      >
-        {/* Top Bar */}
-        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-          <span style={{ fontWeight: 600, color: "#1e293b" }}>
+      {/* CARD */}
+      <div className="bg-white rounded-xl shadow">
+
+        {/* SEARCH */}
+        <div className="p-5 flex justify-between items-center">
+          <span className="font-semibold text-gray-600">
             All Providers ({filtered.length})
           </span>
 
@@ -67,89 +87,62 @@ function AdminProviders() {
             placeholder="Search…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="px-4 py-2 rounded-lg border border-gray-200 outline-none text-sm"
-            style={{ width: "220px" }}
+            className="px-4 py-2 border rounded"
           />
         </div>
 
-        {/* Providers Grid */}
+        {/* GRID */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5">
           {filtered.map((p) => (
             <div
               key={p.id}
-              className="rounded-xl p-5 border border-gray-100 hover:shadow-md cursor-pointer"
+              className="rounded-xl p-5 border hover:shadow-md cursor-pointer"
               onClick={() => navigate(`/admin/providers/${p.id}`)}
             >
-              {/* Top */}
+              {/* TOP */}
               <div className="flex items-start gap-3 mb-3">
-                <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white text-lg flex-shrink-0"
-                  style={{ background: "#1A3C6E" }}
-                >
-                  {p.name[0]}
+                <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white bg-blue-900">
+                  {(p.name || "A")[0]}
                 </div>
 
-                <div className="flex-1 min-w-0">
-                  <div
-                    className="font-semibold"
-                    style={{ color: "#1F2937" }}
-                  >
-                    {p.name}
-                  </div>
-
-                  <div
-                    className="text-xs"
-                    style={{ color: "#6B7280" }}
-                  >
-                    {p.specialty}
+                <div className="flex-1">
+                  <div className="font-semibold">{p.name || "No Name"}</div>
+                  <div className="text-xs text-gray-500">
+                    {p.specialty || "No Specialty"}
                   </div>
                 </div>
 
                 <span
-                  className="px-2 py-1 rounded-full text-xs font-semibold"
-                  style={{
-                    background:
-                      p.status === "active" ? "#DCFCE7" : "#FEE2E2",
-                    color:
-                      p.status === "active" ? "#166534" : "#DC2626",
-                  }}
+                  className={`px-2 py-1 text-xs rounded ${
+                    p.status === "active"
+                      ? "bg-green-100 text-green-700"
+                      : "bg-red-100 text-red-700"
+                  }`}
                 >
-                  {p.status}
+                  {p.status || "inactive"}
                 </span>
               </div>
 
-              {/* Info */}
-              <div
-                className="space-y-1 text-sm mb-3"
-                style={{ color: "#64748B" }}
-              >
-                <div className="flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5" />
-                  {p.location}
+              {/* INFO */}
+              <div className="text-sm text-gray-500 mb-3 space-y-1">
+                <div className="flex items-center gap-1">
+                  <MapPin size={14} />
+                  {p.location || "No location"}
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <Star
-                    className="w-3.5 h-3.5 fill-current"
-                    style={{ color: "#F59E0B" }}
-                  />
-                  {p.rating} ({p.reviews} reviews)
+                <div className="flex items-center gap-1">
+                  <Star size={14} />
+                  {p.rating || 0} ({p.reviews || 0} reviews)
                 </div>
               </div>
 
-              {/* Toggle Button */}
+              {/* TOGGLE */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   toggle(p.id);
                 }}
-                className="w-full py-2 rounded-lg text-xs font-semibold"
-                style={{
-                  background:
-                    p.status === "active" ? "#FEF9C3" : "#DCFCE7",
-                  color:
-                    p.status === "active" ? "#92400E" : "#166534",
-                }}
+                className="w-full py-2 text-xs font-semibold rounded bg-yellow-100"
               >
                 {p.status === "active" ? "Deactivate" : "Activate"}
               </button>
@@ -157,11 +150,9 @@ function AdminProviders() {
           ))}
         </div>
 
+        {/* EMPTY */}
         {filtered.length === 0 && (
-          <div
-            className="py-12 text-center"
-            style={{ color: "#94A3B8" }}
-          >
+          <div className="py-12 text-center text-gray-400">
             No providers found.
           </div>
         )}
