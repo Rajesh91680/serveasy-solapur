@@ -1,35 +1,35 @@
-# urls.py
-# This file defines the API routes for the api_core app.
-# It maps each URL to its corresponding view function.
-# Member 1 - Authentication & Profile
-
 from django.urls import path
 from . import views
 
+
 urlpatterns = [
 
-    # POST /api/auth/register  →  Signup - creates a new user
-    path('auth/register', views.register, name='register'),
+    # =========================
+    # 🔹 AUTH APIs
+    # =========================
+    path('auth/register', views.register),
+    path('auth/login', views.login),
 
-    # POST /api/auth/login  →  Login - verifies user credentials
-    path('auth/login', views.login, name='login'),
+    # =========================
+    # 🔹 USER APIs
+    # =========================
+    path('users/<int:id>', views.get_user),
+    path('users/<int:id>/update', views.update_user),
 
-    # GET /api/users/<id>  →  Get user profile by ID
-    path('users/<int:id>', views.get_user, name='get_user'),
+    # =========================
+    # 🔹 SERVICES APIs
+    # =========================
+    path('services', views.get_services),              # GET all
+    path('services/create', views.create_service),     # POST
+    path('services/<int:id>/update', views.update_service),  # PUT
+    path('services/<int:id>/delete', views.delete_service),  # DELETE
 
-    # PUT /api/users/<id>/update  →  Update user profile
-    path('users/<int:id>/update', views.update_user, name='update_user'),
-
-    # Admin & Service Management
-    path('services', views.create_service),
-    path('services/<int:id>', views.update_service),
-    path('services/delete/<int:id>', views.delete_service),
-    path('services/all', views.get_services),
-
-    # Admin & Provider Management
-    path('providers', views.create_provider),
-    path('providers/<int:id>', views.update_provider),
-    path('providers/delete/<int:id>', views.delete_provider),
-    path('providers/all', views.get_providers),
-
+    # =========================
+    # 🔹 PROVIDERS APIs
+    # =========================
+    path('providers', views.get_providers),                 # GET all
+    path('providers/create', views.create_provider),        # POST
+    path('providers/<int:id>', views.get_provider_by_id),   # ✅ GET single (FIXED)
+    path('providers/<int:id>/update', views.update_provider), # PUT
+    path('providers/<int:id>/delete', views.delete_provider), # DELETE
 ]
