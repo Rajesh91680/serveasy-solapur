@@ -4,9 +4,18 @@ __pycache__/
 
 # Virtual Environment
 venv/
+backend/venv/
+env/
+.venv/
 
 # Django
 db.sqlite3
+media/
+staticfiles/
 
 # Environment variables
 .env
+
+# IDEs
+.vscode/
+.idea/
