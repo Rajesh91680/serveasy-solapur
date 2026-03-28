@@ -85,18 +85,12 @@ function DescPopup({ provider, value, onChange, onSave, onSendAll, selectedProvi
 
   const handleSendAll = () => {
     if (!value.trim()) { alert("Please enter a description first."); return; }
-    selectedProviders.forEach((p, i) => {
-      setTimeout(() => {
-        const clean = p.phone.replace(/\D/g, "");
-        const msg = encodeURIComponent(
-          `Hello ${p.name}! 👋\n\nA customer wants to book your *${service || "service"}* on ServeEasySolapur.\n\nProblem Description:\n${value.trim()}\n\nAre you available?\n\n✅ *YES* – I am available\n❌ *NO* – I am not available`
-        );
-        const a = document.createElement("a");
-        a.href = `https://wa.me/91${clean}?text=${msg}`;
-        a.target = "_blank"; a.rel = "noreferrer";
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      }, i * 800);
-    });
+    // Open WhatsApp only for THIS provider — never loop over others
+    const clean = provider.phone.replace(/\D/g, "");
+    const msg = encodeURIComponent(
+      `Hello ${provider.name}! 👋\n\nA customer wants to book your *${service || "service"}* on ServeEasySolapur.\n\nProblem Description:\n${value.trim()}\n\nAre you available?\n\n✅ *YES* – I am available\n❌ *NO* – I am not available`
+    );
+    window.open(`https://wa.me/91${clean}?text=${msg}`, "_blank", "noreferrer");
     onSendAll(value.trim());
   };
 
@@ -417,7 +411,7 @@ export function ProviderList() {
             availability: null,
             confirmed: false,
             reviewed: false,
-            description: state?.description || ""
+            description: ""
           };
         });
         setPs(s);
@@ -430,9 +424,28 @@ export function ProviderList() {
     fetchProviders();
   }, [state?.description]);
 
+  // SESSION-ONLY: Fetch provider-status from backend but intentionally ignore
+  // waSent / availability / confirmed so every fresh login starts with a clean UI.
+  // Backend data is still fetched (for future server-side use) but never applied to UI state.
+  useEffect(() => {
+    const fetchStatus = async () => {
+      if (!currentUser || allProviders.length === 0) return;
+      try {
+        const res = await axios.get(`${API_URL}provider-status/`, {
+          params: { user_id: currentUser.id }
+        });
+        console.log("Loaded provider status (UI reset for fresh session):", res.data);
+        // Intentionally do NOT apply item.wa_sent / item.availability / item.confirmed.
+        // UI state depends only on actions taken in the current session.
+      } catch (err) {
+        console.error("Failed to fetch provider status:", err);
+      }
+    };
+    fetchStatus();
+  }, [currentUser?.id, allProviders.length]);
+
   const upd = (id, patch) => setPs((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
 
-  // Read address selected during the address-select flow
   const selectedAddress = sessionStorage.getItem("selectedAddress") || state?.address || "";
 
   const getStep = (id) => {
@@ -444,13 +457,59 @@ export function ProviderList() {
     return 0;
   };
 
-  const handleWaSent = (id) => upd(id, { waSent: true });
-  const handleRespond = (id, v) => upd(id, { availability: v });
-  const handleConfirm = (id) => { upd(id, { confirmed: true, reviewed: false }); setReviewProvider(allProviders.find((p) => p.id === id)); };
-  const handleCloseReview = (id) => { setReviewProvider(null); if (id) upd(id, { reviewed: true }); };
+  // FIX 5 + FIX 6: Show only selected providers if any are selected, else show all
+  const shownProviders =
+    chosenIds.length > 0
+      ? allProviders.filter((p) => chosenIds.includes(p.id))
+      : allProviders;
 
-  const shownProviders = chosenIds.length === 0 ? allProviders : allProviders.filter(p => chosenIds.includes(p.id));
   const confirmedCount = shownProviders.filter(p => ps[p.id]?.confirmed).length;
+
+  const handleWaSent = async (id, customDesc = null) => {
+    const description = customDesc || ps[id]?.description || "";
+    upd(id, { waSent: true, description });
+
+    if (!currentUser) return;
+    try {
+      await axios.patch(`${API_URL}provider-status/${id}/wa-sent/`, {
+        user_id: currentUser.id,
+        description: description,
+      });
+    } catch (err) {
+      console.error("Failed to update WA sent status:", err);
+    }
+  };
+
+  const handleRespond = async (id, v) => {
+    upd(id, { availability: v });
+
+    if (!currentUser) return;
+    try {
+      await axios.patch(`${API_URL}provider-status/${id}/response/`, {
+        user_id: currentUser.id,
+        availability: v,
+      });
+    } catch (err) {
+      console.error("Failed to update provider response:", err);
+    }
+  };
+
+  const handleConfirm = async (id) => {
+    upd(id, { confirmed: true, reviewed: false });
+    setReviewProvider(allProviders.find((p) => p.id === id));
+
+    if (!currentUser) return;
+    try {
+      await axios.patch(`${API_URL}provider-status/${id}/confirm/`, {
+        user_id: currentUser.id,
+        confirmed: true,
+      });
+    } catch (err) {
+      console.error("Failed to confirm provider:", err);
+    }
+  };
+
+  const handleCloseReview = (id) => { setReviewProvider(null); if (id) upd(id, { reviewed: true }); };
 
   const handleProceed = async () => {
     const confirmedProviders = shownProviders.filter(p => ps[p.id]?.confirmed);
@@ -496,7 +555,6 @@ export function ProviderList() {
           onDone={(ids) => {
             setChosenIds(ids);
             setPs(prev => { const u = { ...prev }; ids.forEach(id => { if (!u[id]) u[id] = { waSent: false, availability: null, confirmed: false, reviewed: false, description: state?.description || "" }; }); return u; });
-            // Directly open description popup after selecting providers
             const selected = allProviders.filter(p => ids.includes(p.id));
             setSelectAllModal(selected);
           }}
@@ -504,16 +562,16 @@ export function ProviderList() {
       )}
       {descModalFor && (() => {
         const prov = allProviders.find(p => p.id === descModalFor);
-        const selProviders = chosenIds.length > 0 ? allProviders.filter(p => chosenIds.includes(p.id)) : allProviders;
         return prov ? <DescPopup
           provider={prov}
           value={ps[descModalFor]?.description || ""}
           onChange={(v) => upd(descModalFor, { description: v })}
-          selectedProviders={selProviders}
+          selectedProviders={[prov]}
           service={state?.service}
           onSave={() => { if (!ps[descModalFor]?.description?.trim()) { alert("Please enter a description."); return; } setDescModalFor(null); }}
           onSendAll={(desc) => {
-            selProviders.forEach(p => upd(p.id, { description: desc, waSent: true }));
+            // Update ONLY this provider — never touch others
+            handleWaSent(prov.id, desc);
             setDescModalFor(null);
           }}
           onClose={() => setDescModalFor(null)} /> : null;
@@ -525,7 +583,7 @@ export function ProviderList() {
           service={state?.service}
           onSend={(desc) => {
             const targets = Array.isArray(selectAllModal) ? selectAllModal : allProviders;
-            setPs(prev => { const u = { ...prev }; targets.forEach(p => { u[p.id] = { ...u[p.id], description: desc, waSent: true }; }); return u; });
+            targets.forEach(p => handleWaSent(p.id, desc));
             setSelectAllModal(false);
           }}
           onClose={() => setSelectAllModal(false)}
@@ -539,12 +597,11 @@ export function ProviderList() {
             const p = reviewProvider;
             const desc = ps[p.id]?.description?.trim() || state?.description || "";
             const bookingData = { service: state?.service || "General Service", address: selectedAddress, description: desc, date: state?.date || new Date().toLocaleDateString(), time: state?.time || "ASAP", providers: [p.name], bookingId: `BK${Date.now().toString().slice(-6)}` };
-            if (!currentUser) { 
-              sessionStorage.setItem("pendingProviderSelection", JSON.stringify(bookingData)); 
+            if (!currentUser) {
+              sessionStorage.setItem("pendingProviderSelection", JSON.stringify(bookingData));
               window.dispatchEvent(new CustomEvent("openAuth", { detail: { mode: "login" } }));
-              return; 
+              return;
             }
-            // addBooking({ userId: currentUser.id, userName: currentUser.name, userEmail: currentUser.email, ...bookingData, status: "requested" });
             navigate("/booking-request", { state: { ...state, ...bookingData } });
           }} />
       )}
@@ -558,7 +615,6 @@ export function ProviderList() {
 
       <div style={{ maxWidth: "940px", margin: "0 auto", padding: "14px 12px 60px" }}>
 
-        {/* Page header — exactly like Image 1 */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
           <div>
             <h1 style={{ fontSize: "20px", fontWeight: 800, color: "#1A3C6E", margin: 0 }}>Select Professionals</h1>
@@ -589,70 +645,87 @@ export function ProviderList() {
           </div>
         )}
 
-        {/* Provider Cards */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
-          {shownProviders.map((provider) => {
-            const pst = ps[provider.id];
-            if (!pst) return null;
-            const isYes = pst.availability === "yes";
-            const isNo = pst.availability === "no";
-            const step = getStep(provider.id);
-            const bc = pst.confirmed ? "#22C55E" : isYes ? "#6D28D9" : isNo ? "#EF4444" : pst.waSent ? "#F59E0B" : "#E2E8F0";
-            return (
-              <div key={provider.id} style={{ background: "white", borderRadius: "9px", border: `2px solid ${bc}`, boxShadow: "0 1px 3px rgba(0,0,0,0.05)", opacity: isNo ? 0.76 : 1, transition: "border-color 0.2s", overflow: "hidden" }}>
-                {isYes && !pst.confirmed && <div style={{ padding: "3px 10px", background: "#EDE9FE", fontSize: "10px", fontWeight: 700, color: "#5B21B6" }}>✅ {provider.name} is Available — Confirm now!</div>}
-                {isNo && <div style={{ padding: "3px 10px", background: "#FEE2E2", fontSize: "10px", fontWeight: 700, color: "#991B1B" }}>❌ {provider.name} is Not Available</div>}
-                {pst.confirmed && <div style={{ padding: "3px 10px", background: "#DCFCE7", fontSize: "10px", fontWeight: 700, color: "#166534" }}>🎉 Confirmed for Booking!</div>}
-                <div style={{ display: "flex", alignItems: "stretch" }}>
-                  <div style={{ flex: 1, padding: "12px 14px", minWidth: 0 }}>
-                    {/* Avatar + name row */}
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-                      <div style={{ position: "relative", flexShrink: 0 }}>
-                        <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "#1A3C6E", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 800, fontSize: "14px" }}>{initials(provider.name)}</div>
-                        <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "9px", height: "9px", borderRadius: "50%", border: "2px solid white", background: pst.confirmed ? "#22C55E" : isYes ? "#7C3AED" : isNo ? "#EF4444" : pst.waSent ? "#F59E0B" : "#94A3B8" }} />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
-                          <span style={{ fontWeight: 800, fontSize: "14px", color: "#111827" }}>{provider.name}</span>
-                          {pst.confirmed && <span style={{ padding: "1px 6px", borderRadius: "20px", fontSize: "9px", fontWeight: 700, background: "#DCFCE7", color: "#166534", border: "1px solid #86EFAC" }}>🎉 Confirmed</span>}
-                          {!pst.confirmed && isYes && <span style={{ padding: "1px 6px", borderRadius: "20px", fontSize: "9px", fontWeight: 700, background: "#EDE9FE", color: "#5B21B6", border: "1px solid #C4B5FD" }}>✅ Available</span>}
+        {/* Empty state: only shown when no providers exist at all */}
+        {shownProviders.length === 0 ? (
+          <p style={{ textAlign: "center", color: "#9CA3AF", fontSize: "14px", marginTop: "40px" }}>
+            No providers found. Please try again later.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+            {shownProviders.map((provider) => {
+              const pst = ps[provider.id];
+              if (!pst) return null;
+              const isYes = pst.availability === "yes";
+              const isNo = pst.availability === "no";
+              const step = getStep(provider.id);
+              const bc = pst.confirmed ? "#22C55E" : isYes ? "#6D28D9" : isNo ? "#EF4444" : pst.waSent ? "#F59E0B" : "#E2E8F0";
+              return (
+                <div key={provider.id} style={{ background: "white", borderRadius: "9px", border: `2px solid ${bc}`, boxShadow: "0 1px 3px rgba(0,0,0,0.05)", opacity: isNo ? 0.76 : 1, transition: "border-color 0.2s", overflow: "hidden" }}>
+                  {isYes && !pst.confirmed && <div style={{ padding: "3px 10px", background: "#EDE9FE", fontSize: "10px", fontWeight: 700, color: "#5B21B6" }}>✅ {provider.name} is Available — Confirm now!</div>}
+                  {isNo && <div style={{ padding: "3px 10px", background: "#FEE2E2", fontSize: "10px", fontWeight: 700, color: "#991B1B" }}>❌ {provider.name} is Not Available</div>}
+                  {pst.confirmed && <div style={{ padding: "3px 10px", background: "#DCFCE7", fontSize: "10px", fontWeight: 700, color: "#166534" }}>🎉 Confirmed for Booking!</div>}
+                  <div style={{ display: "flex", alignItems: "stretch" }}>
+                    <div style={{ flex: 1, padding: "12px 14px", minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+                        <div style={{ position: "relative", flexShrink: 0 }}>
+                          <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "#1A3C6E", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 800, fontSize: "14px" }}>{initials(provider.name)}</div>
+                          <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "9px", height: "9px", borderRadius: "50%", border: "2px solid white", background: pst.confirmed ? "#22C55E" : isYes ? "#7C3AED" : isNo ? "#EF4444" : pst.waSent ? "#F59E0B" : "#94A3B8" }} />
                         </div>
-                        <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", alignItems: "center", marginTop: "2px" }}>
-                          <span style={{ color: "#F97316", fontWeight: 700, fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.4px" }}>{provider.specialty}</span>
-                          <span style={{ color: "#D1D5DB" }}>·</span>
-                          <span style={{ fontSize: "10px", color: "#6B7280" }}>⭐ {provider.rating} ({provider.reviews})</span>
-                          <span style={{ color: "#D1D5DB" }}>·</span>
-                          <span style={{ fontSize: "10px", color: "#6B7280" }}>💼 {provider.experience}</span>
-                          <span style={{ color: "#D1D5DB" }}>·</span>
-                          <span style={{ fontSize: "10px", color: "#6B7280" }}>📍 {provider.location}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
+                            <span style={{ fontWeight: 800, fontSize: "14px", color: "#111827" }}>{provider.name}</span>
+                            {pst.confirmed && <span style={{ padding: "1px 6px", borderRadius: "20px", fontSize: "9px", fontWeight: 700, background: "#DCFCE7", color: "#166534", border: "1px solid #86EFAC" }}>🎉 Confirmed</span>}
+                            {!pst.confirmed && isYes && <span style={{ padding: "1px 6px", borderRadius: "20px", fontSize: "9px", fontWeight: 700, background: "#EDE9FE", color: "#5B21B6", border: "1px solid #C4B5FD" }}>✅ Available</span>}
+                          </div>
+                          <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", alignItems: "center", marginTop: "2px" }}>
+                            <span style={{ color: "#F97316", fontWeight: 700, fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.4px" }}>{provider.specialty}</span>
+                            <span style={{ color: "#D1D5DB" }}>·</span>
+                            <span style={{ fontSize: "10px", color: "#6B7280" }}>⭐ {provider.rating} ({provider.reviews})</span>
+                            <span style={{ color: "#D1D5DB" }}>·</span>
+                            <span style={{ fontSize: "10px", color: "#6B7280" }}>💼 {provider.experience}</span>
+                            <span style={{ color: "#D1D5DB" }}>·</span>
+                            <span style={{ fontSize: "10px", color: "#6B7280" }}>📍 {provider.location}</span>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: "5px", alignItems: "center", flexShrink: 0 }}>
+                          <span style={{ padding: "2px 7px", background: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "5px", fontSize: "10px", color: "#374151" }}>📞 {provider.phone}</span>
+                          <button onClick={() => setDocProvider(provider)} style={{ padding: "2px 7px", background: "#F0FDF4", color: "#059669", border: "1px solid #86EFAC", borderRadius: "20px", fontSize: "10px", fontWeight: 700, cursor: "pointer" }}>✔ Verified</button>
                         </div>
                       </div>
-                      <div style={{ display: "flex", gap: "5px", alignItems: "center", flexShrink: 0 }}>
-                        <span style={{ padding: "2px 7px", background: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "5px", fontSize: "10px", color: "#374151" }}>📞 {provider.phone}</span>
-                        <button onClick={() => setDocProvider(provider)} style={{ padding: "2px 7px", background: "#F0FDF4", color: "#059669", border: "1px solid #86EFAC", borderRadius: "20px", fontSize: "10px", fontWeight: 700, cursor: "pointer" }}>✔ Verified</button>
-                      </div>
-                    </div>
 
-                    {/* Action buttons */}
-                    <div style={{ display: "flex", gap: "6px" }}>
-                      <button onClick={() => setDescModalFor(provider.id)} style={{ padding: "6px 12px", background: pst.description ? "#EA6C00" : "#F97316", color: "white", border: "none", borderRadius: "7px", fontWeight: 600, fontSize: "11px", cursor: "pointer" }}>
-                        📝 {pst.description ? "Edit Description" : "Add Description"}
-                      </button>
-                      <a href={buildWhatsAppLink(provider.phone, provider.name, state?.service, pst.description)} target="_blank" rel="noreferrer" onClick={() => handleWaSent(provider.id)}
-                        style={{ padding: "6px 12px", background: pst.waSent ? "#16A34A" : "#22C55E", color: "white", border: "none", borderRadius: "7px", fontWeight: 600, fontSize: "11px", cursor: "pointer", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                        💬 {pst.waSent ? "WhatsApp Sent ✓" : "Send WhatsApp"}
-                      </a>
+                      {/* BUTTON ROW: always show both buttons, independent per provider */}
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        {/* Button 1: Add / Edit Description — opens popup for THIS provider only */}
+                        <button
+                          onClick={() => setDescModalFor(provider.id)}
+                          style={{ padding: "6px 12px", background: pst.description ? "#EA6C00" : "#F97316", color: "white", border: "none", borderRadius: "7px", fontWeight: 600, fontSize: "11px", cursor: "pointer" }}>
+                          📝 {pst.description ? "Edit Description" : "Add Description"}
+                        </button>
+                        {/* Button 2: Send WhatsApp — requires description first */}
+                        <button
+                          onClick={() => {
+                            if (!pst.description?.trim()) {
+                              alert("Please add description first");
+                              return;
+                            }
+                            window.open(buildWhatsAppLink(provider.phone, provider.name, state?.service, pst.description), "_blank", "noreferrer");
+                            handleWaSent(provider.id);
+                          }}
+                          style={{ padding: "6px 12px", background: pst.waSent ? "#16A34A" : "#22C55E", color: "white", border: "none", borderRadius: "7px", fontWeight: 600, fontSize: "11px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          💬 {pst.waSent ? "WhatsApp Sent ✓" : "Send WhatsApp"}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div style={{ width: "1px", background: "#F1F5F9", flexShrink: 0 }} />
-                  <div style={{ padding: "6px 6px", flexShrink: 0 }}>
-                    <WorkflowBlock step={step} isYes={isYes} isNo={isNo} pst={pst} providerId={provider.id} onRespond={handleRespond} onConfirm={() => handleConfirm(provider.id)} onReview={() => setReviewProvider(provider)} />
+                    <div style={{ width: "1px", background: "#F1F5F9", flexShrink: 0 }} />
+                    <div style={{ padding: "6px 6px", flexShrink: 0 }}>
+                      <WorkflowBlock step={step} isYes={isYes} isNo={isNo} pst={pst} providerId={provider.id} onRespond={handleRespond} onConfirm={() => handleConfirm(provider.id)} onReview={() => setReviewProvider(provider)} />
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         {confirmedCount > 0 && (
           <div style={{ textAlign: "center", marginTop: "20px" }}>

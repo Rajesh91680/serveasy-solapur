@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import views 
 
 urlpatterns = [
 
@@ -8,6 +8,8 @@ urlpatterns = [
     # -------------------------
     path('auth/register/', views.register, name='register'),
     path('auth/login/', views.login, name='login'),
+    path('verify-otp/', views.verify_otp),
+    path('resend-otp/', views.resend_otp),
 
     path('users/<int:id>/', views.get_user, name='get_user'),
     path('users/<int:id>/update/', views.update_user, name='update_user'),
@@ -36,4 +38,19 @@ urlpatterns = [
 
     path('addresses/user/<int:user_id>/', views.get_user_addresses, name='user_addresses'),  # ✅ FIXED
     path('addresses/<int:pk>/', views.address_detail, name='address_detail'),  # GET, PUT, DELETE
+
+
+    # -------------------------
+    # Provider Status (NEW ✅)
+    # -------------------------
+    path('provider-status/<int:provider_id>/wa-sent/', views.save_wa_sent, name='save_wa_sent'),
+    path('provider-status/<int:provider_id>/response/', views.save_provider_response, name='save_provider_response'),
+    path('provider-status/<int:provider_id>/confirm/', views.confirm_provider, name='confirm_provider'),
+    path('provider-status/', views.get_provider_status, name='get_provider_status'),
+
+
+    # -------------------------
+    # Bookings (NEW ✅)
+    # -------------------------
+    path('bookings/create/', views.create_booking, name='create_booking'),
 ]

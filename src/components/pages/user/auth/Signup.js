@@ -1,28 +1,46 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import Navbar from "../../../Navbar";
+import Login from "./Login";
 
 const API_URL = "http://127.0.0.1:8000/api/";
 
+// Modal UI Styles moved out to avoid re-creation on render
+const modalOverlayStyle = {
+  position: "fixed",
+  inset: 0,
+  backgroundColor: "rgba(15, 23, 42, 0.75)",
+  backdropFilter: "blur(8px)",
+  zIndex: 10000,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "20px",
+};
+
+const modalCardStyle = {
+  backgroundColor: "white",
+  borderRadius: "28px",
+  width: "100%",
+  maxWidth: "400px",
+  padding: "40px 32px",
+  boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+};
+
 /**
- * SignupPage — standalone page at "/signup"
- *
- * Responsibilities:
- *   ✅ Handles signup form & validation
- *   ✅ Calls POST /api/auth/register/
- *   ✅ Navigates to /login on success
+ * SignupPage component
  */
-function SignupPage({ isModal = false }) {
+function SignupPage({ isModal = false, onSwitch }) {
   const navigate = useNavigate();
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [addressTitle, setAddressTitle] = useState("");
+  const [addressTitle, setAddressTitle] = useState("Home");
   const [addressLine1, setAddressLine1] = useState("");
-  const [city, setCity] = useState("");
+  const [city, setCity] = useState("Solapur");
   const [area, setArea] = useState("");
   const [pinCode, setPinCode] = useState("");
 
@@ -30,274 +48,119 @@ function SignupPage({ isModal = false }) {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // ── Validation ──────────────────────────────────────────────────────────────
-  const validate = () => {
-    if (!name.trim()) return "Full name is required.";
-    if (name.trim().length < 3) return "Full name must be at least 3 characters.";
-    if (!phone.trim()) return "Phone number is required.";
-    if (!/^\d{10}$/.test(phone.trim())) return "Phone number must be 10 digits.";
-    if (!email.trim()) return "Email is required.";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return "Enter a valid email.";
-    if (!password.trim()) return "Password is required.";
-    if (password.length < 6) return "Password must be at least 6 characters.";
-    if (!addressTitle.trim()) return "Address title is required.";
-    if (!addressLine1.trim()) return "Address Line 1 is required.";
-    if (addressLine1.trim().length < 5) return "Address Line 1 is too short.";
-    if (!city.trim()) return "City is required.";
-    if (!area.trim()) return "Area is required.";
-    if (!pinCode.trim()) return "Pin Code is required.";
-    if (!/^\d{6}$/.test(pinCode.trim())) return "Pin Code must be 6 digits.";
-    return "";
+  const [step, setStep] = useState("signup"); // 'signup' or 'verify'
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [otpValue, setOtpValue] = useState(["", "", "", "", "", ""]);
+  const [resendTimer, setResendTimer] = useState(0);
+  const [expiryTimer, setExpiryTimer] = useState(300);
+
+  useEffect(() => {
+    let interval;
+    if (step === "verify") {
+      interval = setInterval(() => {
+        setResendTimer((prev) => (prev > 0 ? prev - 1 : 0));
+        setExpiryTimer((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [step]);
+
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s < 10 ? "0" : ""}${s}`;
   };
 
-  // ── Submit ──────────────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(""); setSuccess("");
-
-    const validationError = validate();
-    if (validationError) { setError(validationError); return; }
-
     setLoading(true);
+
     try {
       await axios.post(API_URL + "auth/register/", {
-        name: name.trim(),
-        email: email.trim(),
-        password,
-        phone: phone.trim(),
-        title: addressTitle.trim(),
-        address_line: addressLine1.trim(),
-        city: city.trim(),
-        area: area.trim(),
-        pin_code: pinCode.trim(),
+        name: name.trim(), email: email.trim(), password,
+        phone: phone.trim(), title: addressTitle.trim(),
+        address_line: addressLine1.trim(), city: city.trim(),
+        area: area.trim(), pin_code: pinCode.trim(),
       });
-
-      setSuccess("Account created successfully! Redirecting to login...");
-      setError("");
-
-      // Redirect to login after short delay
-      setTimeout(() => navigate("/login"), 1500);
-
+      setSuccess("Account created! Verify your email.");
+      setStep("verify");
+      setResendTimer(30);
     } catch (err) {
-      setError(
-        err.response?.data?.email?.[0] ||
-        err.response?.data?.error ||
-        "Something went wrong."
-      );
+      setError(err.response?.data?.error || err.response?.data?.email?.[0] || "Failed to create account.");
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
-  if (isModal) {
-    return (
-      <div style={{ padding: "0" }}>
-        {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: "20px" }}>
-          <div style={{
-            width: "50px", height: "50px", borderRadius: "14px",
-            backgroundColor: "#EEF4FF", display: "flex", alignItems: "center",
-            justifyContent: "center", fontSize: "24px", margin: "0 auto 10px",
-          }}>📝</div>
-          <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#1A3C6E", margin: "0 0 4px" }}>
-            Create Account
-          </h1>
-          <p style={{ fontSize: "14px", color: "#6B7280", margin: 0 }}>
-            Join ServeEasySolapur today
-          </p>
-        </div>
+  const handleOtpChange = (index, value) => {
+    if (!/^\d*$/.test(value)) return;
+    if (value.length > 1) value = value.slice(-1);
+    const newOtp = [...otpValue];
+    newOtp[index] = value;
+    setOtpValue(newOtp);
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px", maxHeight: "60vh", overflowY: "auto", paddingRight: "4px" }}>
-          <div>
-            <label style={labelStyle}>Full Name *</label>
-            <input placeholder="Your full name" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>Phone Number *</label>
-            <input placeholder="10-digit number" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} maxLength={10} style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>Email Address *</label>
-            <input type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>Password *</label>
-            <input type="password" placeholder="Min 6 chars" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
-          </div>
+    if (value && index < 5) document.getElementById(`otp-${index + 1}`)?.focus();
+    if (newOtp.join("").length === 6 && value) handleVerifyOtp(newOtp.join(""));
+  };
 
-          <div style={{ borderTop: "1px solid #E5E7EB", marginTop: "4px", paddingTop: "8px" }}>
-            <div style={{ fontSize: "10px", fontWeight: 800, color: "#374151", textTransform: "uppercase", marginBottom: "8px" }}>📍 Address</div>
-          </div>
+  const handleVerifyOtp = async (inputOtp = otpValue.join("")) => {
+    setLoading(true); setError("");
+    try {
+      await axios.post(API_URL + "verify-otp/", { email: email.trim(), otp: inputOtp });
+      setSuccess("Verified! You can now login.");
+      setTimeout(() => setShowLoginModal(true), 1000);
+    } catch (err) {
+      setError(err.response?.data?.error || "Invalid OTP.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-          <div>
-            <label style={labelStyle}>Line 1 *</label>
-            <input placeholder="House No, Street" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} style={inputStyle} />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-            <div>
-              <label style={labelStyle}>Area *</label>
-              <input placeholder="Jule Solapur" value={area} onChange={(e) => setArea(e.target.value)} style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Pincode *</label>
-              <input placeholder="413001" value={pinCode} onChange={(e) => setPinCode(e.target.value.replace(/\D/g, ""))} maxLength={6} style={inputStyle} />
-            </div>
-          </div>
-
-          {error && <div style={{ color: "#DC2626", fontSize: "12px", fontWeight: 600 }}>⚠️ {error}</div>}
-          {success && <div style={{ color: "#16A34A", fontSize: "12px", fontWeight: 600 }}>✅ {success}</div>}
-
-          <button type="submit" disabled={loading} style={{ padding: "14px", borderRadius: "12px", border: "none", backgroundColor: "#1A3C6E", color: "white", fontWeight: 700, fontSize: "15px", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}>
-            {loading ? "Registering..." : "Create Account →"}
-          </button>
-        </form>
-      </div>
-    );
-  }
+  const handleResendOtp = async () => {
+    if (resendTimer > 0) return;
+    setLoading(true);
+    try {
+      await axios.post(API_URL + "resend-otp/", { email: email.trim() });
+      setResendTimer(30); setExpiryTimer(300); setOtpValue(["", "", "", "", "", ""]);
+      setSuccess("OTP resent.");
+    } catch (err) {
+      setError("Failed to resend.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <>
-      <Navbar />
+      {!isModal && <Navbar />}
 
-      <div style={{
-        minHeight: "calc(100vh - 80px)",
-        backgroundColor: "#F0F4F8",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px 16px",
-        fontFamily: "'Segoe UI', system-ui, sans-serif",
-      }}>
-        <div style={{
-          backgroundColor: "white",
-          borderRadius: "20px",
-          width: "100%",
-          maxWidth: "500px",
-          padding: "36px 32px",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.12)",
-          maxHeight: "90vh",
-          overflowY: "auto",
-        }}>
+      <div className={!isModal ? "min-h-[calc(100vh-80px)] bg-slate-50 flex items-center justify-center p-4" : ""}>
+        <div className={!isModal ? "bg-white p-8 rounded-3xl shadow-xl w-full max-w-[480px] border border-slate-100" : "w-full"}>
+          
+          {step === "signup" ? (
+            <div className="w-full">
+              <h2 className="text-xl font-bold text-center mb-4 text-[#1A3C6E]">Create Account</h2>
+              <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+                <input className="border border-slate-300 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all" placeholder="Full Name" value={name} onChange={(e) => setName(e.target.value)} required />
+                <input className="border border-slate-300 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all" placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} maxLength={10} required />
+                <input className="border border-slate-300 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all" placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                <input className="border border-slate-300 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                
+                <div className="border-t border-slate-100 my-1 pt-2">
+                    <p className="text-[10px] uppercase font-bold text-slate-400">📍 Address Details</p>
+                </div>
 
-          {/* Header */}
-          <div style={{ textAlign: "center", marginBottom: "24px" }}>
-            <div style={{
-              width: "56px", height: "56px", borderRadius: "16px",
-              backgroundColor: "#EEF4FF", display: "flex", alignItems: "center",
-              justifyContent: "center", fontSize: "28px", margin: "0 auto 12px",
-            }}>📝</div>
-            <h1 style={{ fontSize: "24px", fontWeight: 800, color: "#1A3C6E", margin: "0 0 4px" }}>
-              Create Account
-            </h1>
-            <p style={{ fontSize: "14px", color: "#6B7280", margin: 0 }}>
-              Join ServeEasySolapur today
-            </p>
-          </div>
+                <input className="border border-slate-300 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all" placeholder="Title (Home / Office / Shop)" value={addressTitle} onChange={(e) => setAddressTitle(e.target.value)} required />
+                <input className="border border-slate-300 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all" placeholder="Address Line 1" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} required />
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-
-            {/* Full Name */}
-            <div>
-              <label style={labelStyle}>Full Name *</label>
-              <input
-                placeholder="Your full name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* Phone */}
-            <div>
-              <label style={labelStyle}>Phone Number *</label>
-              <input
-                placeholder="10-digit phone number"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
-                maxLength={10}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* Email */}
-            <div>
-              <label style={labelStyle}>Email Address *</label>
-              <input
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* Password */}
-            <div>
-              <label style={labelStyle}>Password *</label>
-              <input
-                type="password"
-                placeholder="Minimum 6 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* Divider */}
-            <div style={{ borderTop: "1px solid #E5E7EB", marginTop: "4px", paddingTop: "10px" }}>
-              <div style={{ fontSize: "12px", fontWeight: 800, color: "#374151", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "10px" }}>
-                📍 Address Details
-              </div>
-            </div>
-
-            {/* Address Title */}
-            <div>
-              <label style={labelStyle}>Title *</label>
-              <input
-                placeholder="Home / Office / Shop"
-                value={addressTitle}
-                onChange={(e) => setAddressTitle(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* Address Line 1 */}
-            <div>
-              <label style={labelStyle}>Address Line 1 *</label>
-              <input
-                placeholder="House No, Street Name"
-                value={addressLine1}
-                onChange={(e) => setAddressLine1(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* City + Area + Pincode */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
-              <div>
-                <label style={labelStyle}>City *</label>
-                <select
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  style={inputStyle}
-                >
-                  <option value="">Select</option>
+                <select className="border border-slate-300 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all bg-white" value={city} onChange={(e) => setCity(e.target.value)} required>
+                  <option value="">Select City</option>
                   <option value="Solapur">Solapur</option>
                 </select>
-              </div>
 
-              <div>
-                <label style={labelStyle}>Area *</label>
-                <select
-                  value={area}
-                  onChange={(e) => setArea(e.target.value)}
-                  style={inputStyle}
-                >
-                  <option value="">Select</option>
+                <select className="border border-slate-300 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all bg-white" value={area} onChange={(e) => setArea(e.target.value)} required>
+                  <option value="">Select Area</option>
                   <option value="Jule Solapur">Jule Solapur</option>
                   <option value="Hotgi Road">Hotgi Road</option>
                   <option value="Akkalkot Road">Akkalkot Road</option>
@@ -312,75 +175,65 @@ function SignupPage({ isModal = false }) {
                   <option value="Kambar Ali">Kambar Ali</option>
                   <option value="Murarji Peth">Murarji Peth</option>
                 </select>
-              </div>
 
-              <div>
-                <label style={labelStyle}>Pincode *</label>
-                <input
-                  placeholder="413001"
-                  value={pinCode}
-                  onChange={(e) => setPinCode(e.target.value.replace(/\D/g, ""))}
-                  maxLength={6}
-                  style={inputStyle}
-                />
-              </div>
+                <input className="border border-slate-300 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all" placeholder="Pin Code" value={pinCode} onChange={(e) => setPinCode(e.target.value.replace(/\D/g, ""))} maxLength={6} required />
+
+                {error && <p className="text-red-500 text-sm font-semibold">{error}</p>}
+                {success && <p className="text-green-500 text-sm font-semibold">{success}</p>}
+
+                <button disabled={loading} className="bg-orange-500 text-white py-3 rounded-lg font-bold hover:bg-orange-600 transition-all disabled:opacity-50">
+                  {loading ? "Processing..." : "Sign Up"}
+                </button>
+              </form>
+              
+              {!isModal && (
+                <p className="text-center mt-3 text-sm">
+                  Already have account?
+                  <button type="button" onClick={onSwitch || (() => navigate("/login"))} className="text-orange-500 ml-2 font-bold hover:underline">Login</button>
+                </p>
+              )}
             </div>
+          ) : (
+            <div className="w-full text-center">
+                <div className="text-5xl mb-4">📧</div>
+                <h2 className="text-2xl font-bold text-[#1A3C6E] mb-2">Verify Your Email</h2>
+                <p className="text-slate-500 text-sm mb-6">Enter the 6-digit OTP sent to <br/><b>{email}</b></p>
+                
+                <div className="flex justify-center gap-2 mb-8">
+                  {otpValue.map((d, i) => (
+                    <input key={i} id={`otp-${i}`} className="w-11 h-13 text-center text-xl font-bold border-2 border-slate-200 rounded-xl focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none transition-all" value={d} maxLength={1} onChange={(e) => handleOtpChange(i, e.target.value)} />
+                  ))}
+                </div>
 
-            {/* Error / Success */}
-            {error && (
-              <div style={{
-                padding: "10px 14px", borderRadius: "10px",
-                backgroundColor: "#FEF2F2", border: "1px solid #FECACA",
-                color: "#DC2626", fontSize: "13px", fontWeight: 600,
-              }}>⚠️ {error}</div>
-            )}
-            {success && (
-              <div style={{
-                padding: "10px 14px", borderRadius: "10px",
-                backgroundColor: "#F0FDF4", border: "1px solid #86EFAC",
-                color: "#16A34A", fontSize: "13px", fontWeight: 600,
-              }}>✅ {success}</div>
-            )}
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                padding: "14px", borderRadius: "12px", border: "none",
-                backgroundColor: "#1A3C6E", color: "white", fontWeight: 700,
-                fontSize: "15px", cursor: loading ? "not-allowed" : "pointer",
-                opacity: loading ? 0.7 : 1, transition: "opacity 0.2s",
-                marginTop: "4px",
-              }}
-            >
-              {loading ? "Creating account..." : "Create Account →"}
-            </button>
-          </form>
-
-          {/* Switch to Login */}
-          <div style={{ textAlign: "center", marginTop: "20px", fontSize: "14px", color: "#6B7280" }}>
-            Already have an account?{" "}
-            <Link to="/login" style={{ color: "#F97316", fontWeight: 600, textDecoration: "none" }}>
-              Login
-            </Link>
-          </div>
+                <div className="space-y-5">
+                  <p className="text-sm text-slate-500">Expiring in: <span className="text-orange-600 font-bold">{formatTime(expiryTimer)}</span></p>
+                  <button onClick={() => handleVerifyOtp()} disabled={loading || otpValue.join("").length < 6} className="w-full bg-[#1A3C6E] text-white py-4 rounded-xl font-bold hover:bg-slate-900 transition-all disabled:opacity-50">
+                    {loading ? "Verifying..." : "Verify & Continue"}
+                  </button>
+                  <button onClick={handleResendOtp} disabled={resendTimer > 0} className={`text-sm font-bold block mx-auto ${resendTimer > 0 ? "text-slate-300" : "text-orange-600 hover:underline"}`}>
+                    {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : "Resend Code"}
+                  </button>
+                </div>
+                {error && <p className="text-red-500 text-center text-sm mt-4 font-bold">{error}</p>}
+                {success && <p className="text-green-500 text-center text-sm mt-4 font-bold">{success}</p>}
+            </div>
+          )}
         </div>
       </div>
+
+      {showLoginModal && (
+        <div style={modalOverlayStyle}>
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setShowLoginModal(false)} />
+          <div style={modalCardStyle} className="relative !max-w-md !p-0 overflow-hidden animate-in zoom-in duration-300">
+            <button onClick={() => setShowLoginModal(false)} className="absolute top-6 right-6 w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-all z-10">✕</button>
+            <div className="p-8 pt-10">
+                <Login isModal={true} />
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
-
-// ── Shared styles ─────────────────────────────────────────────────────────────
-const labelStyle = {
-  display: "block", fontSize: "12px", fontWeight: 700, color: "#374151",
-  textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: "6px",
-};
-
-const inputStyle = {
-  width: "100%", padding: "12px 14px", border: "1.5px solid #D1D5DB",
-  borderRadius: "10px", fontSize: "14px", outline: "none",
-  fontFamily: "inherit", boxSizing: "border-box", transition: "border-color 0.2s",
-};
 
 export default SignupPage;

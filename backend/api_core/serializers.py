@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Address, Service, Provider, User
+from .models import Address, Service, Provider, User, ProviderStatus, Booking
 
 
 # -------------------------
@@ -14,7 +14,18 @@ class UserSerializer(serializers.ModelSerializer):
         ]
 
 
+# class RegisterSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = User
+#         fields = [
+#             'name', 'phone', 'email', 'password',
+#             'title', 'address_line', 'city', 'area', 'pin_code'
+#         ]
 class RegisterSerializer(serializers.ModelSerializer):
+
+    phone = serializers.CharField()
+    email = serializers.EmailField()
+
     class Meta:
         model = User
         fields = [
@@ -23,9 +34,24 @@ class RegisterSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
-        return User.objects.create(**validated_data)
+        password = validated_data.pop('password')
 
+        user = User.objects.create(**validated_data)
+        user.password = password
+        user.save()
 
+        return user
+
+    def create(self, validated_data):
+        # Remove password temporarily
+        password = validated_data.pop('password')
+
+        user = User.objects.create(**validated_data)
+        user.password = password  # (you can hash later)
+        user.save()
+
+        return user
+        
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField()
@@ -71,3 +97,21 @@ class AddressSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+# -------------------------
+# NEW SERIALIZERS (✅)
+# -------------------------
+class ProviderStatusSerializer(serializers.ModelSerializer):
+    provider_name = serializers.CharField(source='provider.name', read_only=True)
+    user_name = serializers.CharField(source='user.name', read_only=True)
+
+    class Meta:
+        model = ProviderStatus
+        fields = '__all__'
+
+
+class BookingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Booking
+        fields = '__all__'

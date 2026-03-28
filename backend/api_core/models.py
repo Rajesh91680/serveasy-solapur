@@ -3,26 +3,48 @@ from django.db import models
 
 # -------------------------
 # User Model
-# -------------------------
+# # -------------------------
+# class User(models.Model):
+#     name = models.CharField(max_length=100)
+#     phone = models.CharField(max_length=15, unique=True)
+#     email = models.EmailField(unique=True)
+#     password = models.CharField(max_length=255)
+#     title = models.CharField(max_length=50, blank=True)
+#     address_line = models.TextField(blank=True)
+#     city = models.CharField(max_length=100, blank=True)
+#     area = models.CharField(max_length=100, blank=True)
+#     pin_code = models.CharField(max_length=10, blank=True)
+#     created_at = models.DateTimeField(auto_now_add=True)
+
+#     def __str__(self):
+#         return self.name
+
+#     class Meta:
+#         db_table = 'users'
+
 class User(models.Model):
     name = models.CharField(max_length=100)
     phone = models.CharField(max_length=15, unique=True)
     email = models.EmailField(unique=True)
     password = models.CharField(max_length=255)
+
+    # ✅ ADD THESE
+    is_verified = models.BooleanField(default=False)
+    email_otp = models.CharField(max_length=6, blank=True, null=True)
+    otp_created_at = models.DateTimeField(null=True, blank=True)
+
     title = models.CharField(max_length=50, blank=True)
     address_line = models.TextField(blank=True)
     city = models.CharField(max_length=100, blank=True)
     area = models.CharField(max_length=100, blank=True)
     pin_code = models.CharField(max_length=10, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
     def __str__(self):
         return self.name
 
     class Meta:
         db_table = 'users'
-
-
+        
 # -------------------------
 # Address Model (UPDATED ✅)
 # -------------------------
@@ -89,3 +111,42 @@ class Provider(models.Model):
 
     class Meta:
         db_table = 'provider'
+
+
+# -------------------------
+# Provider Status Model (NEW ✅)
+# -------------------------
+class ProviderStatus(models.Model):
+    provider = models.ForeignKey(Provider, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    wa_sent = models.BooleanField(default=False)
+    availability = models.CharField(max_length=10, null=True, blank=True) # 'yes', 'no', or null
+    confirmed = models.BooleanField(default=False)
+    description = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.name} - {self.provider.name} - {self.availability}"
+
+    class Meta:
+        db_table = 'provider_status'
+        unique_together = ('provider', 'user')
+
+
+# -------------------------
+# Booking Model (NEW ✅)
+# -------------------------
+class Booking(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    service = models.CharField(max_length=255)
+    address = models.TextField()
+    description = models.TextField(blank=True, null=True)
+    providers = models.JSONField(default=list)  # Stores selected provider IDs/info
+    status = models.CharField(max_length=50, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Booking {self.id} - {self.user.name} - {self.service}"
+
+    class Meta:
+        db_table = 'booking'
