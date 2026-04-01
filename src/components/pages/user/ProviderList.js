@@ -9,13 +9,43 @@ const getCurrentUser = () => {
   return user ? JSON.parse(user) : null;
 };
 
-function buildWhatsAppLink(phone, providerName, service, description) {
+// ─── CHANGE 1: buildWhatsAppLink now includes YES/NO response links ────────────
+// Added provider_id and user_id params so backend knows who responded.
+// YES link: /api/respond/?provider=<id>&user=<user_id>&status=yes
+// NO  link: /api/respond/?provider=<id>&user=<user_id>&status=no
+function buildWhatsAppLink(phone, providerName, service, description, providerId, userId) {
   const clean = phone.replace(/\D/g, "");
-  const msg = encodeURIComponent(
-    `Hello ${providerName}! 👋\n\nA customer wants to book your *${service || "service"}* on ServeEasySolapur.\n\nProblem Description:\n${description || "Not provided"}\n\nAre you available to provide the service?\n\nPlease reply:\n✅ *YES* – I am available\n❌ *NO* – I am not available`
-  );
+  const baseUrl = "http://127.0.0.1:8000/api/respond/";
+
+  const yesLink = `${baseUrl}?provider=${providerId}&user=${userId}&status=yes`;
+  const noLink  = `${baseUrl}?provider=${providerId}&user=${userId}&status=no`;
+
+const msg = encodeURIComponent(
+`Hello ${providerName}! 👋
+
+Service Request: *${service || "Service"}*
+
+Problem:
+${description || "Not provided"}
+
+-------------------------
+
+👉 CLICK HERE:
+
+🟢 YES
+${yesLink}
+
+🔴 NO
+${noLink}
+
+-------------------------
+
+Just tap YES or NO`
+);
+
   return `https://wa.me/91${clean}?text=${msg}`;
 }
+
 function initials(n) { return n.split(" ").map((x) => x[0]).join("").slice(0, 2).toUpperCase(); }
 function stars(r) { return "★".repeat(Math.round(r)) + "☆".repeat(5 - Math.round(r)); }
 
@@ -84,15 +114,26 @@ function DescPopup({ provider, value, onChange, onSave, onSendAll, selectedProvi
   }, [onClose]);
 
   const handleSendAll = () => {
-    if (!value.trim()) { alert("Please enter a description first."); return; }
-    // Open WhatsApp only for THIS provider — never loop over others
-    const clean = provider.phone.replace(/\D/g, "");
-    const msg = encodeURIComponent(
-      `Hello ${provider.name}! 👋\n\nA customer wants to book your *${service || "service"}* on ServeEasySolapur.\n\nProblem Description:\n${value.trim()}\n\nAre you available?\n\n✅ *YES* – I am available\n❌ *NO* – I am not available`
-    );
-    window.open(`https://wa.me/91${clean}?text=${msg}`, "_blank", "noreferrer");
-    onSendAll(value.trim());
-  };
+  if (!value.trim()) {
+    alert("Please enter a description first.");
+    return;
+  }
+
+  const userId = getCurrentUser()?.id;
+
+  const link = buildWhatsAppLink(
+    provider.phone,
+    provider.name,
+    service,
+    value.trim(),
+    provider.id,
+    userId
+  );
+
+  window.open(link, "_blank", "noreferrer");
+
+  onSendAll(value.trim());
+};
 
   return (
     <div ref={ref} onClick={(e) => e.target === ref.current && onClose()}
@@ -224,60 +265,32 @@ function DocModal({ provider, onClose }) {
   );
 }
 
-// ─── Respond Dropdown ─────────────────────────────────────────────────────────
-function RespondDropdown({ providerId, isYes, isNo, onRespond }) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef();
-
-  useEffect(() => {
-    const h = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  const bg = isYes ? "#DCFCE7" : isNo ? "#FEE2E2" : "white";
-  const color = isYes ? "#166534" : isNo ? "#991B1B" : "#374151";
-  const bdr = isYes ? "#86EFAC" : isNo ? "#FECACA" : "#D1D5DB";
-  const label = isYes ? "✅ Yes — Available" : isNo ? "❌ No — Unavailable" : "💬 Mark Response ▾";
-
-  const handleSelect = (val) => {
-    onRespond(providerId, val);
-    setOpen(false);
-  };
+// ─── CHANGE 2: RespondDropdown — Read-Only, no click handlers ─────────────────
+// Removed: onClick, onRespond calls, open/close state, dropdown menu.
+// Now shows a static status badge based on the availability value from backend.
+// All updates come exclusively from backend polling — no manual interaction.
+function RespondDropdown({ isYes, isNo }) {
+  const bg    = isYes ? "#DCFCE7" : isNo ? "#FEE2E2" : "#F3F4F6";
+  const color = isYes ? "#166534" : isNo ? "#991B1B" : "#6B7280";
+  const bdr   = isYes ? "#86EFAC" : isNo ? "#FECACA" : "#E5E7EB";
+  const label = isYes ? "✅ Yes — Available" : isNo ? "❌ No — Unavailable" : "⏳ Waiting for reply...";
 
   return (
-    <div ref={wrapRef} style={{ position: "relative" }}>
-      <button onClick={() => setOpen(p => !p)}
-        style={{ width: "100%", padding: "2px 4px", borderRadius: "4px", border: `1px solid ${bdr}`, background: bg, color, fontWeight: 700, fontSize: "8px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {label}
-      </button>
-      {open && (
-        <div style={{ position: "absolute", left: 0, right: 0, top: "calc(100% + 3px)", background: "white", border: "1.5px solid #E5E7EB", borderRadius: "10px", boxShadow: "0 8px 24px rgba(0,0,0,0.12)", overflow: "hidden", zIndex: 600 }}>
-          <div style={{ padding: "6px 10px 4px", fontSize: "9px", color: "#9CA3AF", fontWeight: 700, textTransform: "uppercase", borderBottom: "1px solid #F3F4F6" }}>Provider replied:</div>
-          <div
-            onClick={() => handleSelect("yes")}
-            style={{ padding: "10px 12px", cursor: "pointer", fontSize: "12px", fontWeight: 600, color: "#166534", background: isYes ? "#DCFCE7" : "white", borderBottom: "1px solid #F3F4F6", display: "flex", alignItems: "center", gap: "6px" }}
-            onMouseOver={(e) => e.currentTarget.style.background = "#DCFCE7"}
-            onMouseOut={(e) => e.currentTarget.style.background = isYes ? "#DCFCE7" : "white"}>
-            ✅ Yes — Available
-          </div>
-          <div
-            onClick={() => handleSelect("no")}
-            style={{ padding: "10px 12px", cursor: "pointer", fontSize: "12px", fontWeight: 600, color: "#991B1B", background: isNo ? "#FEE2E2" : "white", display: "flex", alignItems: "center", gap: "6px" }}
-            onMouseOver={(e) => e.currentTarget.style.background = "#FEE2E2"}
-            onMouseOut={(e) => e.currentTarget.style.background = isNo ? "#FEE2E2" : "white"}>
-            ❌ No — Unavailable
-          </div>
-          {(isYes || isNo) && (
-            <div onClick={() => handleSelect(null)}
-              style={{ padding: "6px 10px", cursor: "pointer", fontSize: "10px", color: "#9CA3AF", borderTop: "1px solid #F3F4F6", textAlign: "center" }}
-              onMouseOver={(e) => e.currentTarget.style.background = "#F9FAFB"}
-              onMouseOut={(e) => e.currentTarget.style.background = "white"}>
-              ✕ Clear response
-            </div>
-          )}
-        </div>
-      )}
+    <div style={{
+      width: "100%",
+      padding: "3px 5px",
+      borderRadius: "4px",
+      border: `1px solid ${bdr}`,
+      background: bg,
+      color,
+      fontWeight: 700,
+      fontSize: "8px",
+      textAlign: "center",
+      userSelect: "none",
+      // Read-only: no cursor pointer, no hover effect
+      cursor: "default",
+    }}>
+      {label}
     </div>
   );
 }
@@ -289,7 +302,9 @@ const STEP_META = [
   { label: "Confirm", color: "#7C3AED", bg: "#F5F3FF" },
   { label: "Review", color: "#22C55E", bg: "#F0FDF4" },
 ];
-function WorkflowBlock({ step, isYes, isNo, pst, providerId, onRespond, onConfirm, onReview }) {
+// ─── CHANGE 5: WorkflowBlock — Step 2 depends only on pst.availability (from backend) ───
+// onRespond prop removed — RespondDropdown is now read-only.
+function WorkflowBlock({ step, isYes, isNo, pst, providerId, onConfirm, onReview }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "2px", width: "110px", flexShrink: 0 }}>
       {STEP_META.map((s, i) => {
@@ -308,9 +323,13 @@ function WorkflowBlock({ step, isYes, isNo, pst, providerId, onRespond, onConfir
               <div style={{ width: "11px", height: "11px", borderRadius: "50%", flexShrink: 0, background: done ? "#22C55E" : active ? s.color : "#CBD5E1", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "6px", fontWeight: 900, color: done || active ? "white" : "#9CA3AF" }}>{done ? "✓" : i + 1}</div>
               <span style={{ fontSize: "7px", fontWeight: 800, textTransform: "uppercase", color: done ? "#22C55E" : active ? s.color : "#9CA3AF" }}>{s.label}</span>
             </div>
+            {/* Step 0: Connect — shows WA sent status */}
             {i === 0 && <div style={{ fontSize: "8px", color: pst.waSent ? "#16A34A" : "#9CA3AF", paddingLeft: "14px", lineHeight: 1.2 }}>{pst.waSent ? "✓ Sent" : "Send WA first"}</div>}
-            {i === 1 && <RespondDropdown providerId={providerId} isYes={isYes} isNo={isNo} onRespond={onRespond} />}
+            {/* Step 1: Responded — READ-ONLY, auto-updated by polling */}
+            {i === 1 && <RespondDropdown isYes={isYes} isNo={isNo} />}
+            {/* Step 2: Confirm */}
             {i === 2 && <button disabled={!isYes || pst.confirmed} onClick={onConfirm} style={{ width: "100%", padding: "2px 0", borderRadius: "3px", border: `1px solid ${pst.confirmed ? "#86EFAC" : isYes ? "#7C3AED" : "#E5E7EB"}`, background: pst.confirmed ? "#DCFCE7" : isYes ? "#7C3AED" : "#F3F4F6", color: pst.confirmed ? "#166534" : isYes ? "white" : "#9CA3AF", fontWeight: 700, fontSize: "8px", cursor: isYes && !pst.confirmed ? "pointer" : "not-allowed" }}>{pst.confirmed ? "✓ Done" : isYes ? "Confirm" : "Wait YES"}</button>}
+            {/* Step 3: Review/Book */}
             {i === 3 && <button disabled={!pst.confirmed} onClick={onReview} style={{ width: "100%", padding: "2px 0", borderRadius: "3px", border: `1px solid ${pst.confirmed ? "#22C55E" : "#E5E7EB"}`, background: pst.confirmed ? "#22C55E" : "#F3F4F6", color: pst.confirmed ? "white" : "#9CA3AF", fontWeight: 700, fontSize: "8px", cursor: pst.confirmed ? "pointer" : "not-allowed" }}>{pst.confirmed ? "⭐ Book" : "First"}</button>}
           </div>
         );
@@ -335,7 +354,16 @@ function SelectAllDescModal({ providers, service, onSend, onClose }) {
     providers.forEach((p, i) => {
       setTimeout(() => {
         const a = document.createElement("a");
-        a.href = buildWhatsAppLink(p.phone, p.name, service, description);
+        const userId = getCurrentUser()?.id;
+
+a.href = buildWhatsAppLink(
+  p.phone,
+  p.name,
+  service,
+  description,
+  p.id,
+  userId
+);
         a.target = "_blank";
         a.rel = "noreferrer";
         document.body.appendChild(a);
@@ -397,6 +425,7 @@ export function ProviderList() {
   const [selectPopupOpen, setSelectPopupOpen] = useState(false);
   const [selectAllModal, setSelectAllModal] = useState(false);
 
+  // Fetch providers on mount
   useEffect(() => {
     const fetchProviders = async () => {
       try {
@@ -424,25 +453,54 @@ export function ProviderList() {
     fetchProviders();
   }, [state?.description]);
 
-  // SESSION-ONLY: Fetch provider-status from backend but intentionally ignore
-  // waSent / availability / confirmed so every fresh login starts with a clean UI.
-  // Backend data is still fetched (for future server-side use) but never applied to UI state.
+  // ─── Polling — auto-sync availability from backend every 5 seconds ──────────
+  // KEY RULE: availability is applied ONLY when waSent === true in this session.
+  // If WhatsApp has NOT been sent yet (waSent=false), we ignore whatever value
+  // is in the database — it belongs to a previous session and must not bleed in.
+  // This guarantees a fresh null state until the user sends a new WhatsApp request.
   useEffect(() => {
-    const fetchStatus = async () => {
-      if (!currentUser || allProviders.length === 0) return;
+    if (!currentUser) return;
+
+    const poll = async () => {
       try {
         const res = await axios.get(`${API_URL}provider-status/`, {
           params: { user_id: currentUser.id }
         });
-        console.log("Loaded provider status (UI reset for fresh session):", res.data);
-        // Intentionally do NOT apply item.wa_sent / item.availability / item.confirmed.
-        // UI state depends only on actions taken in the current session.
+        const items = Array.isArray(res.data) ? res.data : [];
+
+        setPs(prev => {
+          const updated = { ...prev };
+          items.forEach(item => {
+            const id = item.provider_id ?? item.provider ?? item.id;
+            if (!id || !updated[id]) return;
+
+            // ── Guard: skip if WhatsApp has NOT been sent this session ──────
+            // Old database values (from previous sessions) are ignored entirely.
+            // Only after the user sends WhatsApp in THIS session do we trust
+            // the backend availability value.
+            if (!updated[id].waSent) return;
+
+            const backendAvailability = item.availability ?? null;
+            if (updated[id].availability !== backendAvailability) {
+              updated[id] = {
+                ...updated[id],
+                availability: backendAvailability,
+              };
+            }
+          });
+          return updated;
+        });
       } catch (err) {
-        console.error("Failed to fetch provider status:", err);
+        console.error("Polling failed:", err);
       }
     };
-    fetchStatus();
+
+    // Poll immediately, then every 5 seconds
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => clearInterval(interval);          // Cleanup on unmount
   }, [currentUser?.id, allProviders.length]);
+  // ─────────────────────────────────────────────────────────────────────────────
 
   const upd = (id, patch) => setPs((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
 
@@ -457,7 +515,6 @@ export function ProviderList() {
     return 0;
   };
 
-  // FIX 5 + FIX 6: Show only selected providers if any are selected, else show all
   const shownProviders =
     chosenIds.length > 0
       ? allProviders.filter((p) => chosenIds.includes(p.id))
@@ -465,34 +522,32 @@ export function ProviderList() {
 
   const confirmedCount = shownProviders.filter(p => ps[p.id]?.confirmed).length;
 
-  const handleWaSent = async (id, customDesc = null) => {
-    const description = customDesc || ps[id]?.description || "";
-    upd(id, { waSent: true, description });
+ const handleWaSent = async (id, customDesc = null) => {
+  const description = customDesc || ps[id]?.description || "";
 
-    if (!currentUser) return;
-    try {
-      await axios.patch(`${API_URL}provider-status/${id}/wa-sent/`, {
-        user_id: currentUser.id,
-        description: description,
-      });
-    } catch (err) {
-      console.error("Failed to update WA sent status:", err);
-    }
-  };
+  // 🔥 RESET availability (THIS FIXES YOUR BUG)
+  upd(id, {
+    waSent: true,
+    availability: null,   // ✅ IMPORTANT
+    description
+  });
 
-  const handleRespond = async (id, v) => {
-    upd(id, { availability: v });
+  if (!currentUser) return;
 
-    if (!currentUser) return;
-    try {
-      await axios.patch(`${API_URL}provider-status/${id}/response/`, {
-        user_id: currentUser.id,
-        availability: v,
-      });
-    } catch (err) {
-      console.error("Failed to update provider response:", err);
-    }
-  };
+  try {
+    await axios.patch(`${API_URL}provider-status/${id}/wa-sent/`, {
+      user_id: currentUser.id,
+      description: description,
+    });
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+  // ─── CHANGE 3: handleRespond removed ─────────────────────────────────────────
+  // No PATCH /response/ call anymore.
+  // Availability updates come exclusively from backend /respond/ via polling.
+  // ─────────────────────────────────────────────────────────────────────────────
 
   const handleConfirm = async (id) => {
     upd(id, { confirmed: true, reviewed: false });
@@ -570,7 +625,6 @@ export function ProviderList() {
           service={state?.service}
           onSave={() => { if (!ps[descModalFor]?.description?.trim()) { alert("Please enter a description."); return; } setDescModalFor(null); }}
           onSendAll={(desc) => {
-            // Update ONLY this provider — never touch others
             handleWaSent(prov.id, desc);
             setDescModalFor(null);
           }}
@@ -645,7 +699,6 @@ export function ProviderList() {
           </div>
         )}
 
-        {/* Empty state: only shown when no providers exist at all */}
         {shownProviders.length === 0 ? (
           <p style={{ textAlign: "center", color: "#9CA3AF", fontSize: "14px", marginTop: "40px" }}>
             No providers found. Please try again later.
@@ -693,22 +746,32 @@ export function ProviderList() {
                         </div>
                       </div>
 
-                      {/* BUTTON ROW: always show both buttons, independent per provider */}
                       <div style={{ display: "flex", gap: "6px" }}>
-                        {/* Button 1: Add / Edit Description — opens popup for THIS provider only */}
                         <button
                           onClick={() => setDescModalFor(provider.id)}
                           style={{ padding: "6px 12px", background: pst.description ? "#EA6C00" : "#F97316", color: "white", border: "none", borderRadius: "7px", fontWeight: 600, fontSize: "11px", cursor: "pointer" }}>
                           📝 {pst.description ? "Edit Description" : "Add Description"}
                         </button>
-                        {/* Button 2: Send WhatsApp — requires description first */}
+                        {/* CHANGE 1 applied here: pass providerId + userId to buildWhatsAppLink */}
                         <button
                           onClick={() => {
                             if (!pst.description?.trim()) {
                               alert("Please add description first");
                               return;
                             }
-                            window.open(buildWhatsAppLink(provider.phone, provider.name, state?.service, pst.description), "_blank", "noreferrer");
+                            const userId = currentUser?.id ?? "guest";
+                            window.open(
+                              buildWhatsAppLink(
+                                provider.phone,
+                                provider.name,
+                                state?.service,
+                                pst.description,
+                                provider.id,   // providerId for YES/NO response links
+                                userId         // userId for YES/NO response links
+                              ),
+                              "_blank",
+                              "noreferrer"
+                            );
                             handleWaSent(provider.id);
                           }}
                           style={{ padding: "6px 12px", background: pst.waSent ? "#16A34A" : "#22C55E", color: "white", border: "none", borderRadius: "7px", fontWeight: 600, fontSize: "11px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}>
@@ -718,7 +781,16 @@ export function ProviderList() {
                     </div>
                     <div style={{ width: "1px", background: "#F1F5F9", flexShrink: 0 }} />
                     <div style={{ padding: "6px 6px", flexShrink: 0 }}>
-                      <WorkflowBlock step={step} isYes={isYes} isNo={isNo} pst={pst} providerId={provider.id} onRespond={handleRespond} onConfirm={() => handleConfirm(provider.id)} onReview={() => setReviewProvider(provider)} />
+                      {/* CHANGE 3: onRespond prop removed — WorkflowBlock no longer needs it */}
+                      <WorkflowBlock
+                        step={step}
+                        isYes={isYes}
+                        isNo={isNo}
+                        pst={pst}
+                        providerId={provider.id}
+                        onConfirm={() => handleConfirm(provider.id)}
+                        onReview={() => setReviewProvider(provider)}
+                      />
                     </div>
                   </div>
                 </div>

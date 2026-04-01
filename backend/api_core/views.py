@@ -11,6 +11,7 @@ from .serializers import (
 from datetime import timedelta
 from django.utils.timezone import now
 from .utils import generate_otp, send_otp_email
+from django.http import HttpResponse
 
 # from .utils import send_whatsapp_message
 # =========================
@@ -411,6 +412,23 @@ def save_wa_sent(request, provider_id):
         user_id=user_id,
         defaults={
             'wa_sent': True,
+            'description': description,
+            'availability': None   # 🔥 THIS IS THE FIX
+        }
+    )
+
+    return Response(ProviderStatusSerializer(status_obj).data)
+    user_id = request.data.get('user_id')
+    description = request.data.get('description', '')
+
+    if not user_id:
+        return Response({'error': 'user_id is required'}, status=400)
+
+    status_obj, created = ProviderStatus.objects.update_or_create(
+        provider_id=provider_id,
+        user_id=user_id,
+        defaults={
+            'wa_sent': True,
             'description': description
         }
     )
@@ -475,3 +493,25 @@ def create_booking(request):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+@api_view(['GET'])
+def respond_via_link(request):
+    provider_id = request.query_params.get('provider')
+    status_val = request.query_params.get('status')
+    user_id = request.query_params.get('user')
+
+    if not provider_id or not status_val or not user_id:
+        return Response({'error': 'Missing data'}, status=400)
+
+    try:
+        status_obj = ProviderStatus.objects.get(
+            provider_id=provider_id,
+            user_id=user_id
+        )
+
+        status_obj.availability = status_val
+        status_obj.save()
+
+        return HttpResponse("<h2>✅ Response recorded. Thank you!</h2>")
+
+    except ProviderStatus.DoesNotExist:
+        return Response({'error': 'No record found'}, status=404)

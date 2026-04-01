@@ -53,4 +53,6 @@ urlpatterns = [
     # Bookings (NEW ✅)
     # -------------------------
     path('bookings/create/', views.create_booking, name='create_booking'),
+    path('respond/', views.respond_via_link, name='respond_via_link'),
+    
 ]
