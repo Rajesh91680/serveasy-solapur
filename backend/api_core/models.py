@@ -83,6 +83,19 @@ class Service(models.Model):
     icon = models.CharField(max_length=100, blank=True)
     image_url = models.URLField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+        return self.name
+
+
+# ================= SERVICES TABLE =================
+# Stores all services managed by admin
+class Service(models.Model):
+    name        = models.CharField(max_length=100)
+    category    = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    status      = models.CharField(max_length=20, default="active")
+
+    class Meta:
+        db_table = 'admin_services'   
 
     def __str__(self):
         return self.name
@@ -150,3 +163,28 @@ class Booking(models.Model):
 
     class Meta:
         db_table = 'booking'
+
+# ================= PROVIDERS TABLE =================
+# Stores service providers linked to services
+class Provider(models.Model):
+    name       = models.CharField(max_length=100)
+    specialty  = models.CharField(max_length=100)
+    location   = models.CharField(max_length=200)
+    experience = models.CharField(max_length=50)
+    phone      = models.CharField(max_length=10)
+
+    # Images
+    photo         = models.ImageField(upload_to="providers/", null=True, blank=True)
+    aadhaar_image = models.ImageField(upload_to="aadhaar/", null=True, blank=True)
+
+    # Ratings
+    rating  = models.FloatField(default=4.5)
+    reviews = models.IntegerField(default=0)
+
+    status  = models.CharField(max_length=20, default="active")
+
+    class Meta:
+        db_table = 'admin_service_providers'   
+
+    def __str__(self):
+        return self.name

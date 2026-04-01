@@ -49,10 +49,16 @@ urlpatterns = [
     path('provider-status/', views.get_provider_status, name='get_provider_status'),
 
 
-    # -------------------------
-    # Bookings (NEW ✅)
-    # -------------------------
-    path('bookings/create/', views.create_booking, name='create_booking'),
-    path('respond/', views.respond_via_link, name='respond_via_link'),
-    
+    # Admin & Service Management
+    path('services', views.create_service),
+    path('services/<int:id>', views.update_service),
+    path('services/delete/<int:id>', views.delete_service),
+    path('services/all', views.get_services),
+
+    # Admin & Provider Management
+    path('providers', views.create_provider),
+    path('providers/<int:id>', views.update_provider),
+    path('providers/delete/<int:id>', views.delete_provider),
+    path('providers/all', views.get_providers),
+
 ]

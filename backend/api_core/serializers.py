@@ -1,5 +1,8 @@
 from rest_framework import serializers
 from .models import Address, Service, Provider, User, ProviderStatus, Booking
+from .models import User, Service, Provider
+
+
 
 
 # -------------------------
@@ -115,3 +118,20 @@ class BookingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Booking
         fields = '__all__'
+    # Used to validate login form data (email and password only)
+    email    = serializers.EmailField()
+    password = serializers.CharField()
+
+# Admin & Service Management
+
+class ServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Service
+        fields = "__all__"
+
+
+class ProviderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Provider
+        fields = "__all__"
+
