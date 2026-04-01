@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Star, MapPin } from "lucide-react";
 
@@ -6,86 +6,70 @@ function AdminProviders() {
   const navigate = useNavigate();
 
   // State Management
-  const [providers, setProviders] = useState([]); // Initially empty array for database records
+  const [providers, setProviders] = useState([]);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true); // Tracks the initial data fetch
+  const [loading, setLoading] = useState(true);
 
   const API_URL = process.env.REACT_APP_API_URL || "http://127.0.0.1:8000/api";
+  const BASE_URL = "http://127.0.0.1:8000"; // For media files
 
-// ✅ 1. FETCH DATA: Trigger API call when the component loads
-  useEffect(() => {
-    fetchProviders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Function to get all providers from the Django PostgreSQL database
-  const fetchProviders = async () => {
+  // ✅ 1. FETCH DATA: Wrapped in useCallback to fix ESLint warnings
+  const fetchProviders = useCallback(async () => {
     try {
-      const response = await fetch(`${API_URL}/providers/all`);
+      // Note: Make sure your backend URL is 'admin/providers' or 'providers/all'
+      const response = await fetch(`${API_URL}/admin/providers`); 
       if (response.ok) {
         const data = await response.json();
-        setProviders(data); // Populate the UI with real database records
-      } else {
-        console.error("Failed to fetch providers from API");
+        setProviders(data);
       }
     } catch (error) {
       console.error("Error connecting to Django backend:", error);
     } finally {
-      setLoading(false); // Stop the loading spinner/text
+      setLoading(false);
     }
-  };
+  }, [API_URL]);
 
-  // Filter providers based on the search bar input
+  useEffect(() => {
+    fetchProviders();
+  }, [fetchProviders]);
+
+  // Filter providers based on search
   const filtered = providers.filter(
     (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.specialty.toLowerCase().includes(search.toLowerCase())
+      p.name?.toLowerCase().includes(search.toLowerCase()) ||
+      p.specialty?.toLowerCase().includes(search.toLowerCase())
   );
 
-  // ✅ 2. UPDATE DATA: Toggle Provider Status (Active/Inactive) in Database
-  const toggle = async (id) => {
+  // ✅ 2. UPDATE DATA: Toggle Provider Status
+  const toggleStatus = async (id) => {
     const providerToUpdate = providers.find((p) => p.id === id);
     const newStatus = providerToUpdate.status === "active" ? "inactive" : "active";
 
-    // Optimistic UI Update: Change the UI instantly before the API finishes
-    const updated = providers.map((p) =>
-      p.id === id ? { ...p, status: newStatus } : p
-    );
-    setProviders(updated);
+    // Optimistic Update: Change UI instantly
+    setProviders(prev => prev.map((p) => 
+        p.id === id ? { ...p, status: newStatus } : p
+    ));
 
     try {
-      // Prepare data to send to Django
-      const formData = new FormData();
-      formData.append("status", newStatus);
-      
-      // We must append required fields so the serializer doesn't reject the PUT request
-      formData.append("name", providerToUpdate.name);
-      formData.append("specialty", providerToUpdate.specialty);
-      formData.append("location", providerToUpdate.location);
-      formData.append("experience", providerToUpdate.experience);
-      formData.append("phone", providerToUpdate.phone);
-      
-      // Send PUT request to update the specific provider
+      // We only need to send the field we want to change
       const response = await fetch(`${API_URL}/providers/${id}`, {
         method: "PUT",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to update status in PostgreSQL");
-      }
+      if (!response.ok) throw new Error("Failed to update");
     } catch (error) {
       console.error("Update failed:", error);
-      alert("Failed to update status. Reverting changes.");
-      fetchProviders(); // Revert UI to the actual database state if the API fails
+      alert("Failed to update status. Reverting...");
+      fetchProviders(); // Revert to database state
     }
   };
 
-  // Render a loading screen while waiting for the API response
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64 text-gray-500 font-semibold text-lg">
-        Loading Providers from Database... ⏳
+      <div className="flex justify-center items-center h-64 text-gray-400 font-medium">
+        Loading specialists from Solapur... ⏳
       </div>
     );
   }
@@ -93,96 +77,73 @@ function AdminProviders() {
   return (
     <div>
       {/* Header Section */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1
-            style={{
-              color: "#1A3C6E",
-              fontSize: "28px",
-              fontWeight: 700,
-            }}
-          >
+          <h1 style={{ color: "#1A3C6E", fontSize: "28px", fontWeight: 700 }}>
             Service Providers
           </h1>
+          <p className="text-sm text-slate-500">Manage your team of professionals.</p>
         </div>
 
-        {/* Add New Provider Button */}
         <button
           onClick={() => navigate("/admin/providers/add")}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-white transition-opacity hover:opacity-90"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-white transition-all hover:shadow-lg active:scale-95"
           style={{ backgroundColor: "#F97316" }}
         >
           <Plus className="w-4 h-4" />
-          Add Provider
+          Add New
         </button>
       </div>
 
-      {/* Main Content Card */}
-      <div
-        className="bg-white rounded-xl overflow-hidden"
-        style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.06)" }}
-      >
-        {/* Top Bar: Count & Search */}
-        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-          <span style={{ fontWeight: 600, color: "#1e293b" }}>
-            All Providers ({filtered.length})
+      {/* Search & Filter Bar */}
+      <div className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm mb-6">
+        <div className="p-5 flex items-center justify-between">
+          <span className="font-bold text-slate-700">
+            Total Professionals ({filtered.length})
           </span>
 
           <input
-            placeholder="Search…"
+            placeholder="Search by name or specialty..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="px-4 py-2 rounded-lg border border-gray-200 outline-none text-sm focus:border-blue-500 transition-colors"
-            style={{ width: "220px" }}
+            className="px-4 py-2 rounded-xl border border-slate-200 outline-none text-sm focus:ring-2 focus:ring-blue-100 transition-all"
+            style={{ width: "280px" }}
           />
         </div>
 
-        {/* Providers Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5">
+        {/* Grid View */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 p-6 bg-slate-50/50">
           {filtered.map((p) => (
             <div
               key={p.id}
-              className="rounded-xl p-5 border border-gray-100 hover:shadow-md cursor-pointer transition-shadow"
+              className="bg-white rounded-2xl p-5 border border-slate-100 hover:shadow-md transition-all cursor-pointer group"
               onClick={() => navigate(`/admin/providers/${p.id}`)}
             >
-              {/* Card Top: Image/Initials, Name, Status */}
-              <div className="flex items-start gap-3 mb-3">
-                
-                {/* Dynamically render uploaded photo or fallback to Name Initials */}
+              <div className="flex items-start gap-4 mb-4">
+                {/* Photo or Initial */}
                 {p.photo ? (
                   <img 
-                    src={`http://127.0.0.1:8000${p.photo}`} 
+                    src={p.photo.startsWith('http') ? p.photo : `${BASE_URL}${p.photo}`} 
                     alt={p.name} 
-                    className="w-12 h-12 rounded-full object-cover border border-gray-200"
+                    className="w-14 h-14 rounded-2xl object-cover ring-2 ring-slate-50"
                   />
                 ) : (
-                  <div
-                    className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white text-lg flex-shrink-0"
-                    style={{ background: "#1A3C6E" }}
-                  >
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center font-bold text-white text-xl" style={{ background: "#1A3C6E" }}>
                     {p.name ? p.name[0].toUpperCase() : "P"}
                   </div>
                 )}
 
                 <div className="flex-1 min-w-0">
-                  <div
-                    className="font-semibold truncate"
-                    style={{ color: "#1F2937" }}
-                  >
+                  <div className="font-bold text-slate-800 truncate group-hover:text-blue-700 transition-colors">
                     {p.name}
                   </div>
-
-                  <div
-                    className="text-xs truncate"
-                    style={{ color: "#6B7280" }}
-                  >
+                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                     {p.specialty}
                   </div>
                 </div>
 
-                {/* Status Badge */}
                 <span
-                  className="px-2 py-1 rounded-full text-xs font-semibold"
+                  className="px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase"
                   style={{
                     background: p.status === "active" ? "#DCFCE7" : "#FEE2E2",
                     color: p.status === "active" ? "#166534" : "#DC2626",
@@ -192,50 +153,38 @@ function AdminProviders() {
                 </span>
               </div>
 
-              {/* Card Info: Location & Ratings */}
-              <div
-                className="space-y-1 text-sm mb-3"
-                style={{ color: "#64748B" }}
-              >
-                <div className="flex items-center gap-1.5 truncate">
-                  <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
-                  {p.location}
+              <div className="space-y-2 text-sm text-slate-500 mb-4">
+                <div className="flex items-center gap-2">
+                  <MapPin size={14} className="text-slate-300" />
+                  <span className="truncate">{p.location}</span>
                 </div>
-
-                <div className="flex items-center gap-1.5">
-                  <Star
-                    className="w-3.5 h-3.5 fill-current flex-shrink-0"
-                    style={{ color: "#F59E0B" }}
-                  />
-                  {p.rating} ({p.reviews} reviews)
+                <div className="flex items-center gap-2">
+                  <Star size={14} className="fill-orange-400 text-orange-400" />
+                  <span className="font-bold text-slate-700">{p.rating}</span>
+                  <span className="text-xs text-slate-300">({p.reviews} reviews)</span>
                 </div>
               </div>
 
-              {/* Toggle Activate/Deactivate Button */}
               <button
                 onClick={(e) => {
-                  e.stopPropagation(); // Prevents triggering the card's onClick (navigation)
-                  toggle(p.id);
+                  e.stopPropagation();
+                  toggleStatus(p.id);
                 }}
-                className="w-full py-2 rounded-lg text-xs font-semibold transition-colors hover:brightness-95"
+                className="w-full py-2.5 rounded-xl text-xs font-bold transition-all"
                 style={{
-                  background: p.status === "active" ? "#FEF9C3" : "#DCFCE7",
-                  color: p.status === "active" ? "#92400E" : "#166534",
+                  background: p.status === "active" ? "#F1F5F9" : "#DCFCE7",
+                  color: p.status === "active" ? "#64748B" : "#166534",
                 }}
               >
-                {p.status === "active" ? "Deactivate" : "Activate"}
+                {p.status === "active" ? "Deactivate Account" : "Activate Account"}
               </button>
             </div>
           ))}
         </div>
 
-        {/* Empty State / No Results */}
         {filtered.length === 0 && (
-          <div
-            className="py-12 text-center"
-            style={{ color: "#94A3B8" }}
-          >
-            No providers found in the database.
+          <div className="py-20 text-center text-slate-400 font-medium">
+            No specialists found matching "{search}"
           </div>
         )}
       </div>

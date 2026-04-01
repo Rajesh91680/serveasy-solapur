@@ -7,15 +7,24 @@
 # This file uses Django ORM written in Python to perform database operations.
 # Instead of writing raw SQL queries, we use Python methods provided by Django ORM.
 # Language used: Python (Django ORM)
-
+from .models import Review
+from .serializers import ReviewSerializer
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import User
+from .models import User, Provider, Service, Review, ServiceRequest
 from .serializers import UserSerializer, RegisterSerializer, LoginSerializer
 from .models import Service, Provider
 from .serializers import ServiceSerializer, ProviderSerializer
-
+from .serializers import (# Serializer Imports
+    UserSerializer, 
+    RegisterSerializer, 
+    LoginSerializer, 
+    ServiceSerializer, 
+    ProviderSerializer, 
+    ReviewSerializer, 
+    ServiceRequestSerializer  # Make sure this one is here!
+)
 
 # POST /api/auth/register
 # Receives signup form data and creates a new user in the database.
@@ -220,7 +229,7 @@ def create_provider(request):
 @api_view(['PUT'])
 def update_provider(request, id):
     """
-    Update provider details by ID
+    Update provider details by ID (Supports partial updates like just status)
     """
 
     try:
@@ -230,7 +239,8 @@ def update_provider(request, id):
             "error": "Provider not found"
         }, status=status.HTTP_404_NOT_FOUND)
 
-    serializer = ProviderSerializer(provider, data=request.data)
+    # 🔹 ADDED partial=True HERE
+    serializer = ProviderSerializer(provider, data=request.data, partial=True)
 
     if serializer.is_valid():
         serializer.save()
@@ -238,11 +248,13 @@ def update_provider(request, id):
             "message": "Provider updated successfully",
             "data": serializer.data
         })
+    
+    # 🔹 LOGGING: This helps us see errors in the terminal if it still fails
+    print("SERIALIZER ERRORS:", serializer.errors)
 
     return Response({
         "error": serializer.errors
     }, status=status.HTTP_400_BAD_REQUEST)
-
 
 # ----------------------------------------
 # DELETE PROVIDER
@@ -302,3 +314,169 @@ def get_providers(request):
     serializer = ProviderSerializer(providers, many=True)
 
     return Response(serializer.data)
+
+
+# =========================================================
+# 🔹 REVIEWS APIs (User Side)
+# =========================================================
+
+# POST /api/reviews/submit
+# This API receives the rating, review text, and work photo to save in the database.
+@api_view(['POST'])
+def submit_review(request):
+    """
+    Saves a user's service review and work photo to the database.
+    Request Type: multipart/form-data
+    """
+    serializer = ReviewSerializer(data=request.data)
+
+    if serializer.is_valid():
+        serializer.save()
+        return Response({
+            "message": "Review submitted successfully!",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    return Response({
+        "error": serializer.errors
+    }, status=status.HTTP_400_BAD_REQUEST)
+
+
+    # =========================================================
+# 🔹 ADMIN APIs (Review Management)
+# =========================================================
+
+# GET /api/admin/reviews/all
+# This API fetches all service reviews from the database for the Admin dashboard.
+# It returns a list of all ratings, comments, and work photo URLs.
+@api_view(['GET'])
+def get_all_reviews(request):
+    """
+    Fetch all reviews stored in the database.
+    Used by the Admin to monitor service quality.
+    """
+    # Fetching all reviews and ordering by newest first
+    reviews = Review.objects.all().order_by('-created_at')
+    
+    # Converting database objects into JSON format
+    serializer = ReviewSerializer(reviews, many=True)
+    
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# =========================================================
+# 🔹 ADMIN DASHBOARD STATS API
+# =========================================================
+
+# GET /api/admin/stats
+# This API fetches the total counts from all main tables (Users, Providers, Bookings, Reviews).
+# It is used to show the "Big Numbers" on the Admin Dashboard screen.
+@api_view(['GET'])
+def admin_dashboard_stats(request):
+    """
+    Fetch real-time statistics from PostgreSQL for the Admin Dashboard.
+    """
+    # 1. Count Total Customers (excluding anyone with an admin role if applicable)
+    total_users = User.objects.count()
+
+    # 2. Count Total Service Providers
+    total_providers = Provider.objects.count()
+    active_providers = Provider.objects.filter(status="active").count()
+
+    # 3. Count Service Bookings (Total and Completed)
+    total_requests = ServiceRequest.objects.count()
+    completed_requests = ServiceRequest.objects.filter(status="completed").count()
+
+    # 4. Count Total Feedback/Reviews received
+    total_reviews = Review.objects.count()
+
+    # Prepare the data package to send to React
+    data = {
+        "total_users": total_users,
+        "total_providers": total_providers,
+        "active_providers": active_providers,
+        "total_requests": total_requests,
+        "completed_requests": completed_requests,
+        "total_reviews": total_reviews
+    }
+
+    return Response(data)
+
+
+# GET /api/admin/service-requests
+# Fetches all bookings from PostgreSQL for the Admin to view.
+@api_view(['GET'])
+def get_service_requests(request):
+    requests = ServiceRequest.objects.all().order_by('-id')
+    serializer = ServiceRequestSerializer(requests, many=True)
+    return Response(serializer.data)
+
+# PUT /api/admin/service-requests/<id>/update-status
+# Updates the status of a booking (e.g., requested -> confirmed).
+@api_view(['PUT'])
+def update_service_status(request, id):
+    try:
+        service_req = ServiceRequest.objects.get(id=id)
+        # We only update the 'status' field from the request body
+        service_req.status = request.data.get('status', service_req.status)
+        service_req.save()
+        return Response({"message": "Status updated successfully", "status": service_req.status})
+    except ServiceRequest.DoesNotExist:
+        return Response({"error": "Request not found"}, status=404)
+
+
+        # GET /api/admin/users
+# Fetches all registered customers for the Admin table
+@api_view(['GET'])
+def get_admin_users(request):
+    # Exclude admins so we only see customers
+    users = User.objects.exclude(role='admin').order_by('-id')
+    serializer = UserSerializer(users, many=True)
+    return Response(serializer.data)
+
+
+# GET /api/admin/providers
+# Fetches all technicians/service providers for the Admin
+@api_view(['GET'])
+def get_admin_providers(request):
+    providers = Provider.objects.all().order_by('-id')
+    serializer = ProviderSerializer(providers, many=True)
+    return Response(serializer.data)
+
+
+# PUT /api/providers/<id>
+# This API updates provider details (like status: active/inactive)
+@api_view(['PUT'])
+def update_provider_details(request, id):
+    try:
+        provider = Provider.objects.get(id=id)
+        
+        # 'partial=True' allows us to update only the 'status' field 
+        # without sending all other fields again.
+        serializer = ProviderSerializer(provider, data=request.data, partial=True)
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+    except Provider.DoesNotExist:
+        return Response({"error": "Provider not found"}, status=404)
+
+        # GET /api/admin/reviews
+@api_view(['GET'])
+def get_admin_reviews(request):
+    reviews = Review.objects.all().order_by('-created_at')
+    serializer = ReviewSerializer(reviews, many=True)
+    return Response(serializer.data)
+
+# PUT /api/admin/reviews/<id>/status
+@api_view(['PUT'])
+def update_review_status(request, id):
+    try:
+        review = Review.objects.get(id=id)
+        # We update the status (e.g., approved, rejected)
+        review.status = request.data.get('status', review.status)
+        review.save()
+        return Response({"message": "Review updated"})
+    except Review.DoesNotExist:
+        return Response({"error": "Not found"}, status=404)

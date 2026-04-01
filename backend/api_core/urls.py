@@ -32,4 +32,33 @@ urlpatterns = [
     path('providers/delete/<int:id>', views.delete_provider),
     path('providers/all', views.get_providers),
 
+    # =========================================================
+    # 🔹 REVIEWS ROUTES (User Side)
+    # =========================================================
+
+    # POST /api/reviews/submit  →  Save rating and work photo to DB
+    path('reviews/submit', views.submit_review, name='submit_review'),
+
+    # GET /api/admin/reviews/all  →  Fetch all reviews for Admin
+    path('admin/reviews/all', views.get_all_reviews, name='get_all_reviews'),
+    
+
+    # GET /api/admin/stats  →  Fetch counts for Dashboard
+    path('admin/stats', views.admin_dashboard_stats, name='admin_stats'),
+
+    # Admin - Service Request Management
+    path('admin/service-requests', views.get_service_requests, name='get_all_requests'),
+    path('admin/service-requests/<int:id>/update-status', views.update_service_status, name='update_status'),
+
+    path('admin/users', views.get_admin_users, name='admin_users'),
+
+    path('admin/providers', views.get_admin_providers, name='admin_providers'),
+
+    # Provider Management
+    path('providers/all', views.get_admin_providers, name='all_providers'),
+    path('providers/<int:id>', views.update_provider_details, name='update_provider'),
+
+    path('admin/reviews', views.get_admin_reviews, name='admin_reviews'),
+    path('admin/reviews/<int:id>/status', views.update_review_status, name='review_status'),
+
 ]
