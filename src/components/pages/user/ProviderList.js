@@ -3,20 +3,17 @@ import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 
 const API_URL = "http://127.0.0.1:8000/api/";
+const PUBLIC_URL = "https://unmurmured-hermine-turgent.ngrok-free.dev";
+
 
 const getCurrentUser = () => {
   const user = sessionStorage.getItem("currentUser");
   return user ? JSON.parse(user) : null;
 };
 
-// ─── CHANGE 1: buildWhatsAppLink now includes YES/NO response links ────────────
-// Added provider_id and user_id params so backend knows who responded.
-// YES link: /api/respond/?provider=<id>&user=<user_id>&status=yes
-// NO  link: /api/respond/?provider=<id>&user=<user_id>&status=no
 function buildWhatsAppLink(phone, providerName, service, description, providerId, userId) {
   const clean = phone.replace(/\D/g, "");
-  const baseUrl = "http://127.0.0.1:8000/api/respond/";
-
+  const baseUrl = `${PUBLIC_URL}/api/respond/`;
   const yesLink = `${baseUrl}?provider=${providerId}&user=${userId}&status=yes`;
   const noLink  = `${baseUrl}?provider=${providerId}&user=${userId}&status=no`;
 
@@ -49,7 +46,6 @@ Just tap YES or NO`
 function initials(n) { return n.split(" ").map((x) => x[0]).join("").slice(0, 2).toUpperCase(); }
 function stars(r) { return "★".repeat(Math.round(r)) + "☆".repeat(5 - Math.round(r)); }
 
-// ─── Select Provider Popup ────────────────────────────────────────────────────
 function SelectProviderPopup({ providers, alreadySelected, onDone, onClose }) {
   const ref = useRef();
   const [selected, setSelected] = useState(new Set());
@@ -104,7 +100,6 @@ function SelectProviderPopup({ providers, alreadySelected, onDone, onClose }) {
   );
 }
 
-// ─── Description Popup ────────────────────────────────────────────────────────
 function DescPopup({ provider, value, onChange, onSave, onSendAll, selectedProviders, service, onClose }) {
   const ref = useRef();
   useEffect(() => {
@@ -161,7 +156,6 @@ function DescPopup({ provider, value, onChange, onSave, onSendAll, selectedProvi
   );
 }
 
-// ─── Review Modal ─────────────────────────────────────────────────────────────
 function ReviewModal({ provider, onClose, onBook }) {
   const ref = useRef();
   const [copied, setCopied] = useState(false);
@@ -230,7 +224,6 @@ Booked via ServeEasySolapur`;
   );
 }
 
-// ─── Doc Modal ────────────────────────────────────────────────────────────────
 function DocModal({ provider, onClose }) {
   const ref = useRef();
   useEffect(() => {
@@ -265,10 +258,6 @@ function DocModal({ provider, onClose }) {
   );
 }
 
-// ─── CHANGE 2: RespondDropdown — Read-Only, no click handlers ─────────────────
-// Removed: onClick, onRespond calls, open/close state, dropdown menu.
-// Now shows a static status badge based on the availability value from backend.
-// All updates come exclusively from backend polling — no manual interaction.
 function RespondDropdown({ isYes, isNo }) {
   const bg    = isYes ? "#DCFCE7" : isNo ? "#FEE2E2" : "#F3F4F6";
   const color = isYes ? "#166534" : isNo ? "#991B1B" : "#6B7280";
@@ -287,7 +276,6 @@ function RespondDropdown({ isYes, isNo }) {
       fontSize: "8px",
       textAlign: "center",
       userSelect: "none",
-      // Read-only: no cursor pointer, no hover effect
       cursor: "default",
     }}>
       {label}
@@ -295,15 +283,13 @@ function RespondDropdown({ isYes, isNo }) {
   );
 }
 
-// ─── Workflow Block ───────────────────────────────────────────────────────────
 const STEP_META = [
   { label: "Connect", color: "#3B82F6", bg: "#EFF6FF" },
   { label: "Responded", color: "#F59E0B", bg: "#FFFBEB" },
   { label: "Confirm", color: "#7C3AED", bg: "#F5F3FF" },
   { label: "Review", color: "#22C55E", bg: "#F0FDF4" },
 ];
-// ─── CHANGE 5: WorkflowBlock — Step 2 depends only on pst.availability (from backend) ───
-// onRespond prop removed — RespondDropdown is now read-only.
+
 function WorkflowBlock({ step, isYes, isNo, pst, providerId, onConfirm, onReview }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "2px", width: "110px", flexShrink: 0 }}>
@@ -323,13 +309,9 @@ function WorkflowBlock({ step, isYes, isNo, pst, providerId, onConfirm, onReview
               <div style={{ width: "11px", height: "11px", borderRadius: "50%", flexShrink: 0, background: done ? "#22C55E" : active ? s.color : "#CBD5E1", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "6px", fontWeight: 900, color: done || active ? "white" : "#9CA3AF" }}>{done ? "✓" : i + 1}</div>
               <span style={{ fontSize: "7px", fontWeight: 800, textTransform: "uppercase", color: done ? "#22C55E" : active ? s.color : "#9CA3AF" }}>{s.label}</span>
             </div>
-            {/* Step 0: Connect — shows WA sent status */}
             {i === 0 && <div style={{ fontSize: "8px", color: pst.waSent ? "#16A34A" : "#9CA3AF", paddingLeft: "14px", lineHeight: 1.2 }}>{pst.waSent ? "✓ Sent" : "Send WA first"}</div>}
-            {/* Step 1: Responded — READ-ONLY, auto-updated by polling */}
             {i === 1 && <RespondDropdown isYes={isYes} isNo={isNo} />}
-            {/* Step 2: Confirm */}
             {i === 2 && <button disabled={!isYes || pst.confirmed} onClick={onConfirm} style={{ width: "100%", padding: "2px 0", borderRadius: "3px", border: `1px solid ${pst.confirmed ? "#86EFAC" : isYes ? "#7C3AED" : "#E5E7EB"}`, background: pst.confirmed ? "#DCFCE7" : isYes ? "#7C3AED" : "#F3F4F6", color: pst.confirmed ? "#166534" : isYes ? "white" : "#9CA3AF", fontWeight: 700, fontSize: "8px", cursor: isYes && !pst.confirmed ? "pointer" : "not-allowed" }}>{pst.confirmed ? "✓ Done" : isYes ? "Confirm" : "Wait YES"}</button>}
-            {/* Step 3: Review/Book */}
             {i === 3 && <button disabled={!pst.confirmed} onClick={onReview} style={{ width: "100%", padding: "2px 0", borderRadius: "3px", border: `1px solid ${pst.confirmed ? "#22C55E" : "#E5E7EB"}`, background: pst.confirmed ? "#22C55E" : "#F3F4F6", color: pst.confirmed ? "white" : "#9CA3AF", fontWeight: 700, fontSize: "8px", cursor: pst.confirmed ? "pointer" : "not-allowed" }}>{pst.confirmed ? "⭐ Book" : "First"}</button>}
           </div>
         );
@@ -338,7 +320,6 @@ function WorkflowBlock({ step, isYes, isNo, pst, providerId, onConfirm, onReview
   );
 }
 
-// ─── Select All Desc Modal ────────────────────────────────────────────────────
 function SelectAllDescModal({ providers, service, onSend, onClose }) {
   const [desc, setDesc] = useState("");
   const ref = useRef();
@@ -425,7 +406,6 @@ export function ProviderList() {
   const [selectPopupOpen, setSelectPopupOpen] = useState(false);
   const [selectAllModal, setSelectAllModal] = useState(false);
 
-  // Fetch providers on mount
   useEffect(() => {
     const fetchProviders = async () => {
       try {
@@ -453,11 +433,6 @@ export function ProviderList() {
     fetchProviders();
   }, [state?.description]);
 
-  // ─── Polling — auto-sync availability from backend every 5 seconds ──────────
-  // KEY RULE: availability is applied ONLY when waSent === true in this session.
-  // If WhatsApp has NOT been sent yet (waSent=false), we ignore whatever value
-  // is in the database — it belongs to a previous session and must not bleed in.
-  // This guarantees a fresh null state until the user sends a new WhatsApp request.
   useEffect(() => {
     if (!currentUser) return;
 
@@ -474,10 +449,6 @@ export function ProviderList() {
             const id = item.provider_id ?? item.provider ?? item.id;
             if (!id || !updated[id]) return;
 
-            // ── Guard: skip if WhatsApp has NOT been sent this session ──────
-            // Old database values (from previous sessions) are ignored entirely.
-            // Only after the user sends WhatsApp in THIS session do we trust
-            // the backend availability value.
             if (!updated[id].waSent) return;
 
             const backendAvailability = item.availability ?? null;
@@ -495,12 +466,10 @@ export function ProviderList() {
       }
     };
 
-    // Poll immediately, then every 5 seconds
     poll();
     const interval = setInterval(poll, 5000);
-    return () => clearInterval(interval);          // Cleanup on unmount
+    return () => clearInterval(interval);
   }, [currentUser?.id, allProviders.length]);
-  // ─────────────────────────────────────────────────────────────────────────────
 
   const upd = (id, patch) => setPs((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
 
@@ -525,10 +494,9 @@ export function ProviderList() {
  const handleWaSent = async (id, customDesc = null) => {
   const description = customDesc || ps[id]?.description || "";
 
-  // 🔥 RESET availability (THIS FIXES YOUR BUG)
   upd(id, {
     waSent: true,
-    availability: null,   // ✅ IMPORTANT
+    availability: null,
     description
   });
 
@@ -543,11 +511,6 @@ export function ProviderList() {
     console.error(err);
   }
 };
-
-  // ─── CHANGE 3: handleRespond removed ─────────────────────────────────────────
-  // No PATCH /response/ call anymore.
-  // Availability updates come exclusively from backend /respond/ via polling.
-  // ─────────────────────────────────────────────────────────────────────────────
 
   const handleConfirm = async (id) => {
     upd(id, { confirmed: true, reviewed: false });
@@ -603,6 +566,45 @@ export function ProviderList() {
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#F0F4F8", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+
+      {/* ── Mobile layout styles — ONLY change in this file ── */}
+      <style>{`
+        @media (max-width: 768px) {
+          .provider-avatar-row {
+            gap: 6px !important;
+            margin-bottom: 4px !important;
+          }
+          .provider-detail-col {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 2px !important;
+          }
+          .provider-name-row {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            align-items: center !important;
+            gap: 4px !important;
+          }
+          .provider-meta-row {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 2px !important;
+            margin-top: 0 !important;
+          }
+          .provider-meta-row span[style*="D1D5DB"] {
+            display: none !important;
+          }
+          .provider-phone-row {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 4px !important;
+            align-items: center !important;
+            margin-top: 2px !important;
+          }
+        }
+      `}</style>
 
       {/* Modals */}
       {selectPopupOpen && (
@@ -719,32 +721,146 @@ export function ProviderList() {
                   {pst.confirmed && <div style={{ padding: "3px 10px", background: "#DCFCE7", fontSize: "10px", fontWeight: 700, color: "#166534" }}>🎉 Confirmed for Booking!</div>}
                   <div style={{ display: "flex", alignItems: "stretch" }}>
                     <div style={{ flex: 1, padding: "12px 14px", minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-                        <div style={{ position: "relative", flexShrink: 0 }}>
-                          <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "#1A3C6E", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 800, fontSize: "14px" }}>{initials(provider.name)}</div>
-                          <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "9px", height: "9px", borderRadius: "50%", border: "2px solid white", background: pst.confirmed ? "#22C55E" : isYes ? "#7C3AED" : isNo ? "#EF4444" : pst.waSent ? "#F59E0B" : "#94A3B8" }} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
-                            <span style={{ fontWeight: 800, fontSize: "14px", color: "#111827" }}>{provider.name}</span>
-                            {pst.confirmed && <span style={{ padding: "1px 6px", borderRadius: "20px", fontSize: "9px", fontWeight: 700, background: "#DCFCE7", color: "#166534", border: "1px solid #86EFAC" }}>🎉 Confirmed</span>}
-                            {!pst.confirmed && isYes && <span style={{ padding: "1px 6px", borderRadius: "20px", fontSize: "9px", fontWeight: 700, background: "#EDE9FE", color: "#5B21B6", border: "1px solid #C4B5FD" }}>✅ Available</span>}
-                          </div>
-                          <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", alignItems: "center", marginTop: "2px" }}>
-                            <span style={{ color: "#F97316", fontWeight: 700, fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.4px" }}>{provider.specialty}</span>
-                            <span style={{ color: "#D1D5DB" }}>·</span>
-                            <span style={{ fontSize: "10px", color: "#6B7280" }}>⭐ {provider.rating} ({provider.reviews})</span>
-                            <span style={{ color: "#D1D5DB" }}>·</span>
-                            <span style={{ fontSize: "10px", color: "#6B7280" }}>💼 {provider.experience}</span>
-                            <span style={{ color: "#D1D5DB" }}>·</span>
-                            <span style={{ fontSize: "10px", color: "#6B7280" }}>📍 {provider.location}</span>
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", gap: "5px", alignItems: "center", flexShrink: 0 }}>
-                          <span style={{ padding: "2px 7px", background: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "5px", fontSize: "10px", color: "#374151" }}>📞 {provider.phone}</span>
-                          <button onClick={() => setDocProvider(provider)} style={{ padding: "2px 7px", background: "#F0FDF4", color: "#059669", border: "1px solid #86EFAC", borderRadius: "20px", fontSize: "10px", fontWeight: 700, cursor: "pointer" }}>✔ Verified</button>
-                        </div>
-                      </div>
+
+                      {/* ── Avatar row: avatar LEFT, details RIGHT, stays as row ── */}
+                   <div
+  className="provider-avatar-row"
+  style={{
+    display: "flex",
+    alignItems: "flex-start",
+    gap: window.innerWidth <= 768 ? "6px" : "10px",
+    marginBottom: "6px"
+  }}
+>
+  {/* Avatar */}
+  <div style={{ position: "relative", flexShrink: 0 }}>
+    <div
+      style={{
+        width: window.innerWidth <= 768 ? "36px" : "42px",
+        height: window.innerWidth <= 768 ? "36px" : "42px",
+        borderRadius: "10px",
+        background: "#1A3C6E",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "white",
+        fontWeight: 800,
+        fontSize: "14px"
+      }}
+    >
+      {initials(provider.name)}
+    </div>
+
+    <div
+      style={{
+        position: "absolute",
+        bottom: "1px",
+        right: "1px",
+        width: "9px",
+        height: "9px",
+        borderRadius: "50%",
+        border: "2px solid white",
+        background: pst.confirmed
+          ? "#22C55E"
+          : isYes
+          ? "#7C3AED"
+          : isNo
+          ? "#EF4444"
+          : pst.waSent
+          ? "#F59E0B"
+          : "#94A3B8"
+      }}
+    />
+  </div>
+
+  {/* DETAILS (STACKED PERFECTLY) */}
+  <div
+    className="provider-detail-col"
+    style={{
+      flex: 1,
+      minWidth: 0,
+      display: "flex",
+      flexDirection: "column",
+      gap: "2px"
+    }}
+  >
+    {/* NAME */}
+    <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
+      <span style={{ fontWeight: 800, fontSize: "14px", color: "#111827" }}>
+        {provider.name}
+      </span>
+
+      {pst.confirmed && (
+        <span style={{ padding: "1px 6px", borderRadius: "20px", fontSize: "9px", fontWeight: 700, background: "#DCFCE7", color: "#166534", border: "1px solid #86EFAC" }}>
+          🎉 Confirmed
+        </span>
+      )}
+
+      {!pst.confirmed && isYes && (
+        <span style={{ padding: "1px 6px", borderRadius: "20px", fontSize: "9px", fontWeight: 700, background: "#EDE9FE", color: "#5B21B6", border: "1px solid #C4B5FD" }}>
+          ✅ Available
+        </span>
+      )}
+    </div>
+
+    {/* META — NOW PERFECT STACK ON MOBILE */}
+    <div
+      className="provider-meta-row"
+      style={{
+        display: "flex",
+        flexDirection: window.innerWidth <= 768 ? "column" : "row",
+        alignItems: window.innerWidth <= 768 ? "flex-start" : "center",
+        gap: "2px",
+        marginTop: "2px"
+      }}
+    >
+      <span style={{ color: "#F97316", fontWeight: 700, fontSize: "9px", textTransform: "uppercase" }}>
+        {provider.specialty}
+      </span>
+
+      {window.innerWidth > 768 && <span style={{ color: "#D1D5DB" }}>·</span>}
+
+      <span style={{ fontSize: "10px", color: "#6B7280" }}>
+        ⭐ {provider.rating} ({provider.reviews})
+      </span>
+
+      {window.innerWidth > 768 && <span style={{ color: "#D1D5DB" }}>·</span>}
+
+      <span style={{ fontSize: "10px", color: "#6B7280" }}>
+        💼 {provider.experience}
+      </span>
+
+      {window.innerWidth > 768 && <span style={{ color: "#D1D5DB" }}>·</span>}
+
+      <span style={{ fontSize: "10px", color: "#6B7280" }}>
+        📍 {provider.location}
+      </span>
+    </div>
+
+    {/* PHONE */}
+    <div style={{ display: "flex", gap: "4px", alignItems: "center", marginTop: "2px", flexWrap: "wrap" }}>
+      <span style={{ padding: "2px 7px", background: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "5px", fontSize: "10px", color: "#374151" }}>
+        📞 {provider.phone}
+      </span>
+
+      <button
+        onClick={() => setDocProvider(provider)}
+        style={{
+          padding: "2px 7px",
+          background: "#F0FDF4",
+          color: "#059669",
+          border: "1px solid #86EFAC",
+          borderRadius: "20px",
+          fontSize: "10px",
+          fontWeight: 700,
+          cursor: "pointer"
+        }}
+      >
+        ✔ Verified
+      </button>
+    </div>
+  </div>
+</div>
 
                       <div style={{ display: "flex", gap: "6px" }}>
                         <button
@@ -752,7 +868,6 @@ export function ProviderList() {
                           style={{ padding: "6px 12px", background: pst.description ? "#EA6C00" : "#F97316", color: "white", border: "none", borderRadius: "7px", fontWeight: 600, fontSize: "11px", cursor: "pointer" }}>
                           📝 {pst.description ? "Edit Description" : "Add Description"}
                         </button>
-                        {/* CHANGE 1 applied here: pass providerId + userId to buildWhatsAppLink */}
                         <button
                           onClick={() => {
                             if (!pst.description?.trim()) {
@@ -766,8 +881,8 @@ export function ProviderList() {
                                 provider.name,
                                 state?.service,
                                 pst.description,
-                                provider.id,   // providerId for YES/NO response links
-                                userId         // userId for YES/NO response links
+                                provider.id,
+                                userId
                               ),
                               "_blank",
                               "noreferrer"
@@ -781,7 +896,6 @@ export function ProviderList() {
                     </div>
                     <div style={{ width: "1px", background: "#F1F5F9", flexShrink: 0 }} />
                     <div style={{ padding: "6px 6px", flexShrink: 0 }}>
-                      {/* CHANGE 3: onRespond prop removed — WorkflowBlock no longer needs it */}
                       <WorkflowBlock
                         step={step}
                         isYes={isYes}

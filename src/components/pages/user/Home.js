@@ -430,9 +430,22 @@ export function Home() {
               </DropdownPanel>
             </div>
 
+            {/* ── Search button: only this block was changed ── */}
+            <style>{`
+              @media (max-width: 768px) {
+                .search-btn-text { display: none; }
+                .search-btn {
+                  width: 48px !important;
+                  height: 48px !important;
+                  padding: 0 !important;
+                  justify-content: center !important;
+                }
+              }
+            `}</style>
             <div style={{ padding: '10px', flexShrink: 0 }}>
               <button
                 onClick={handleSearch}
+                className="search-btn"
                 style={{
                   height: '44px',
                   padding: '0 32px',
@@ -451,7 +464,7 @@ export function Home() {
                 }}
               >
                 <Search style={{ width: '16px', height: '16px' }} />
-                Search
+                <span className="search-btn-text">Search</span>
               </button>
             </div>
           </div>
