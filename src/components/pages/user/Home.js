@@ -1,20 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, Search, Wrench, X } from 'lucide-react';
+import axios from 'axios';
 import { Navbar } from '../../Navbar';
 import { Footer } from '../../Footer';
-import { getCurrentUser } from '../../../services/store';
 
-const services = [
-  { id: 'ac-repair', name: 'AC Repair', icon: '❄️' },
-  { id: 'electrician', name: 'Electrician', icon: '⚡' },
-  { id: 'plumber', name: 'Plumber', icon: '🔧' },
-  { id: 'cleaning', name: 'Home Cleaning', icon: '🧹' },
-  { id: 'carpenter', name: 'Carpenter', icon: '🪚' },
-  { id: 'pest-control', name: 'Pest Control', icon: '🐛' },
-  { id: 'beauty', name: 'Beauty at Home', icon: '💅' },
-  { id: 'ro-repair', name: 'RO Repair', icon: '💧' },
-];
+const API_URL = 'http://127.0.0.1:8000/api/';
+
+const getCurrentUser = () => {
+  const user = sessionStorage.getItem('currentUser');
+  return user ? JSON.parse(user) : null;
+};
 
 function DropdownPanel({ open, onClose, children, width = 280 }) {
   const ref = useRef();
@@ -53,11 +49,24 @@ function DropdownPanel({ open, onClose, children, width = 280 }) {
 export function Home() {
   const navigate = useNavigate();
 
+  const [services, setServices] = useState([]);
   const [sel, setSel] = useState('');
   const [serviceOpen, setServiceOpen] = useState(false);
   const [serviceSearch, setServiceSearch] = useState('');
 
-  const selectedService = services.find((s) => s.id === sel);
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const res = await axios.get(API_URL + 'services/');
+        setServices(res.data);
+      } catch (err) {
+        console.error('Failed to fetch services:', err);
+      }
+    };
+    fetchServices();
+  }, []);
+
+  const selectedService = services.find((s) => (s.id === sel || s.name === sel));
   const filteredServices = services.filter((s) =>
     s.name.toLowerCase().includes(serviceSearch.toLowerCase())
   );
@@ -67,11 +76,11 @@ export function Home() {
     navigate('/providers', {
       state: {
         serviceId,
-        service: selected?.name || serviceId,
-        description: '',
+        service: selected?.name || 'Service',
+        description: selected?.description || '',
         date: new Date().toLocaleDateString(),
         time: 'ASAP',
-        amount: '₹499',
+        amount: selected?.price ? `₹${selected.price}` : '₹499',
       },
     });
   };
@@ -81,17 +90,14 @@ export function Home() {
     setServiceOpen(false);
     setServiceSearch('');
 
-    const currentUser = getCurrentUser();
+    const user = getCurrentUser();
 
-    if (!currentUser) {
+    if (!user) {
       sessionStorage.setItem(
         'pendingHomeService',
         JSON.stringify({ serviceId })
       );
-
-      if (window.__navbarOpenModal) {
-        window.__navbarOpenModal('login');
-      }
+      window.dispatchEvent(new CustomEvent("openAuth", { detail: { mode: "login" } }));
       return;
     }
 
@@ -104,42 +110,24 @@ export function Home() {
       return;
     }
 
-    const currentUser = getCurrentUser();
+    const user = getCurrentUser();
 
-    if (!currentUser) {
+    if (!user) {
       sessionStorage.setItem(
         'pendingHomeService',
         JSON.stringify({ serviceId: sel })
       );
-
-      if (window.__navbarOpenModal) {
-        window.__navbarOpenModal('login');
-      }
+      window.dispatchEvent(new CustomEvent("openAuth", { detail: { mode: "login" } }));
       return;
     }
 
     goToProviders(sel);
   };
 
-  const handleAuthSuccess = () => {
-    const pending = sessionStorage.getItem('pendingHomeService');
-    if (!pending) return;
-
-    try {
-      const data = JSON.parse(pending);
-      sessionStorage.removeItem('pendingHomeService');
-
-      if (data?.serviceId) {
-        goToProviders(data.serviceId);
-      }
-    } catch {
-      sessionStorage.removeItem('pendingHomeService');
-    }
-  };
 
   return (
     <div className="min-h-screen bg-white">
-      <Navbar onAuthSuccess={handleAuthSuccess} />
+      <Navbar />
 
       <section
         style={{
@@ -442,9 +430,22 @@ export function Home() {
               </DropdownPanel>
             </div>
 
+            {/* ── Search button: only this block was changed ── */}
+            <style>{`
+              @media (max-width: 768px) {
+                .search-btn-text { display: none; }
+                .search-btn {
+                  width: 48px !important;
+                  height: 48px !important;
+                  padding: 0 !important;
+                  justify-content: center !important;
+                }
+              }
+            `}</style>
             <div style={{ padding: '10px', flexShrink: 0 }}>
               <button
                 onClick={handleSearch}
+                className="search-btn"
                 style={{
                   height: '44px',
                   padding: '0 32px',
@@ -463,7 +464,7 @@ export function Home() {
                 }}
               >
                 <Search style={{ width: '16px', height: '16px' }} />
-                Search
+                <span className="search-btn-text">Search</span>
               </button>
             </div>
           </div>
