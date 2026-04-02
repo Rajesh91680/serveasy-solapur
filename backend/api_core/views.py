@@ -137,7 +137,7 @@ def update_user(request, id):
             return Response({'message': 'Profile updated.', 'user': serializer.data})
         return Response(serializer.errors, status=400)
     except User.DoesNotExist:
-        return Response({'error': 'User not found.'}, status=404)
+        return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
 
 
 # -------------------------

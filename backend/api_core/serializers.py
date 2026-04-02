@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Address, Service, Provider, User, ProviderStatus, Booking
 
 
+
 # -------------------------
 # User Serializers
 # -------------------------
@@ -105,3 +106,4 @@ class BookingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Booking
         fields = '__all__'
+
