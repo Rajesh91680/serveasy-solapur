@@ -1,0 +1,11 @@
+--- ADMIN: CREATE SERVICE ---
+{"message":"Service created","data":{"id":5,"name":"Plumbing","category":"Home","description":"Pipe fixing","icon":"","image_url":null,"status":"active","created_at":"2026-04-02T10:29:08.035508Z"}}
+
+--- ADMIN: UPDATE SERVICE (ID: 5) ---
+{"message":"Service updated","data":{"id":5,"name":"Fix-It-All Plumbing","category":"Home","description":"Pipe fixing","icon":"","image_url":null,"status":"active","created_at":"2026-04-02T10:29:08.035508Z"}}
+
+--- ADMIN: CREATE PROVIDER ---
+{"message":"Provider created","data":{"id":8,"name":"Admin Tester","specialty":"All-Rounder","rating":0.0,"reviews":0,"experience":10,"price":"100.00","location":"Solapur","phone":"1010101010","avatar_url":null,"photo":null,"aadhaar_image":null,"is_verified":false,"status":"active","created_at":"2026-04-02T10:29:08.211152Z","service":null}}
+
+--- ADMIN: GET ALL ---
+[{"id":5,"name":"Fix-It-All Plumbing","category":"Home","description":"Pipe fixing","icon":"","image_url":null,"status":"active","created_at":"2026-04-02T10:29:08.035508Z"},{"id":4,"name":"Cleaning","[{"id":8,"name":"Admin Tester","specialty":"All-Rounder","rating":0.0,"reviews":0,"experience":10,"price":"100.00","location":"Solapur","phone":"1010101010","avatar_url":null,"photo":null,"aadhaar_ima
