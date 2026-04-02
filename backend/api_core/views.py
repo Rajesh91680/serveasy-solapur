@@ -1,13 +1,15 @@
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils.timezone import now
 from django.http import HttpResponse
-from .models import User, Service, Provider, Address, ProviderStatus, Booking
+from .models import User, Service, Provider, Address, ProviderStatus, Booking, Review, ServiceRequest
 from .serializers import (
     UserSerializer, RegisterSerializer, LoginSerializer, 
     ServiceSerializer, ProviderSerializer, AddressSerializer,
-    ProviderStatusSerializer, BookingSerializer
+    ProviderStatusSerializer, BookingSerializer, 
+    ReviewSerializer, ServiceRequestSerializer
 )
 from .utils import generate_otp, send_otp_email
 
@@ -137,7 +139,18 @@ def update_user(request, id):
             return Response({'message': 'Profile updated.', 'user': serializer.data})
         return Response(serializer.errors, status=400)
     except User.DoesNotExist:
-        return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'User not found.'}, status=404)
+
+
+# -------------------------
+# Admin User List (from rajesh-branch)
+# -------------------------
+@api_view(['GET'])
+def get_admin_users(request):
+    # Exclude admins or just fetch all
+    users = User.objects.all().order_by('-id')
+    serializer = UserSerializer(users, many=True)
+    return Response(serializer.data)
 
 
 # -------------------------
@@ -204,6 +217,13 @@ def get_providers(request):
 
 
 @api_view(['GET'])
+def get_admin_providers(request):
+    providers = Provider.objects.all().order_by('-id')
+    serializer = ProviderSerializer(providers, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
 def get_providers_by_service(request, service_id):
     providers = Provider.objects.filter(service_id=service_id)
     serializer = ProviderSerializer(providers, many=True)
@@ -232,7 +252,7 @@ def create_provider(request):
 def update_provider(request, id):
     try:
         provider = Provider.objects.get(id=id)
-        serializer = ProviderSerializer(provider, data=request.data)
+        serializer = ProviderSerializer(provider, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response({"message": "Provider updated", "data": serializer.data})
@@ -252,7 +272,7 @@ def delete_provider(request, id):
 
 
 # -------------------------
-# Provider Status & Actions
+# Provider Status & Actions (monika-new)
 # -------------------------
 
 @api_view(['PATCH'])
@@ -357,7 +377,7 @@ def address_detail(request, pk):
 
 
 # -------------------------
-# Bookings
+# Bookings (from monika-new branch)
 # -------------------------
 
 @api_view(['POST'])
@@ -367,3 +387,183 @@ def create_booking(request):
         serializer.save()
         return Response(serializer.data, status=201)
     return Response(serializer.errors, status=400)
+
+
+# -------------------------
+# Reviews (NEW from rajesh-branch)
+# -------------------------
+
+@api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser])
+def submit_review(request):
+    # FormData sends all values as strings, but the serializer expects
+    # integer pk values for ForeignKey fields (user, provider).
+    # Create a mutable copy and convert them to integers.
+    data = request.data.copy()
+    if 'user' in data:
+        try:
+            data['user'] = int(data['user'])
+        except (ValueError, TypeError):
+            return Response({"error": {"user": ["A valid integer is required."]}}, status=400)
+    if 'provider' in data:
+        try:
+            data['provider'] = int(data['provider'])
+        except (ValueError, TypeError):
+            return Response({"error": {"provider": ["A valid integer is required."]}}, status=400)
+
+    serializer = ReviewSerializer(data=data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({"message": "Review submitted successfully!", "data": serializer.data}, status=201)
+    return Response({"error": serializer.errors}, status=400)
+
+
+@api_view(['GET'])
+def get_all_reviews(request):
+    reviews = Review.objects.all().order_by('-created_at')
+    serializer = ReviewSerializer(reviews, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+def get_admin_reviews(request):
+    reviews = Review.objects.all().order_by('-created_at')
+    serializer = ReviewSerializer(reviews, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['PUT'])
+def update_review_status(request, id):
+    try:
+        review = Review.objects.get(id=id)
+        new_status = request.data.get('status', review.status)
+        review.status = new_status
+        review.save()
+
+        # Update average rating of provider if approved
+        if new_status == 'approved':
+            provider = review.provider
+            approved_reviews = Review.objects.filter(provider=provider, status='approved')
+            total_reviews = approved_reviews.count()
+            if total_reviews > 0:
+                avg_rating = sum([r.rating for r in approved_reviews]) / total_reviews
+                provider.rating = round(avg_rating, 1)
+                provider.reviews = total_reviews
+                provider.save()
+
+        return Response({"message": "Review updated status successfully"})
+    except Review.DoesNotExist:
+        return Response({"error": "Review not found"}, status=404)
+
+
+# -------------------------
+# Admin Dashboard Stats (NEW from rajesh-branch)
+# -------------------------
+
+@api_view(['GET'])
+def admin_dashboard_stats(request):
+    total_users = User.objects.count()
+    total_providers = Provider.objects.count()
+    active_providers = Provider.objects.filter(status="active").count()
+    
+    # Try using ServiceRequest or Booking
+    total_requests = ServiceRequest.objects.count()
+    completed_requests = ServiceRequest.objects.filter(status="completed").count()
+    
+    total_reviews = Review.objects.count()
+
+    data = {
+        "total_users": total_users,
+        "total_providers": total_providers,
+        "active_providers": active_providers,
+        "total_requests": total_requests,
+        "completed_requests": completed_requests,
+        "total_reviews": total_reviews
+    }
+    return Response(data)
+
+
+# -------------------------
+# Service Requests / Bookings (rajesh-branch style)
+# -------------------------
+
+@api_view(['GET'])
+def get_service_requests(request):
+    requests = ServiceRequest.objects.all().order_by('-id')
+    serializer = ServiceRequestSerializer(requests, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['PUT'])
+def update_service_status(request, id):
+    try:
+        service_req = ServiceRequest.objects.get(id=id)
+        service_req.status = request.data.get('status', service_req.status)
+        service_req.save()
+        return Response({"message": "Status updated successfully", "status": service_req.status})
+    except ServiceRequest.DoesNotExist:
+        return Response({"error": "Request not found"}, status=404)
+# -------------------------
+# User Specific Data (Bookings & Reviews)
+# -------------------------
+
+@api_view(['GET'])
+def get_user_bookings(request, user_id):
+    # Fetch from both Booking and ServiceRequest to be safe, 
+    # but primarily ServiceRequest seems to be the newer model.
+    # We will try to harmonize the fields for the frontend.
+    
+    bookings = Booking.objects.filter(user_id=user_id).order_by('-created_at')
+    service_requests = ServiceRequest.objects.filter(user_id=user_id).order_by('-created_at')
+    
+    combined_bookings = []
+    
+    # Process Bookings
+    for b in bookings:
+        combined_bookings.append({
+            'id': b.id,
+            'type': 'booking',
+            'service': b.service,
+            'address': b.address,
+            'description': b.description,
+            'providers': b.providers,
+            'status': b.status,
+            'date': b.created_at.strftime('%Y-%m-%d'),
+            'time': b.created_at.strftime('%H:%M %p'),
+            'created_at': b.created_at
+        })
+        
+    # Process Service Requests
+    for sr in service_requests:
+        combined_bookings.append({
+            'id': sr.id,
+            'type': 'service_request',
+            'service': sr.service_name,
+            'provider': sr.provider.name if sr.provider else "N/A",
+            'providers': [sr.provider.name] if sr.provider else [],
+            'date': str(sr.date),
+            'time': sr.time,
+            'status': sr.status,
+            'description': sr.description,
+            'address': "Address not specified", # ServiceRequest lacks address field
+            'created_at': sr.created_at
+        })
+        
+    # Sort by created_at
+    combined_bookings.sort(key=lambda x: x['created_at'], reverse=True)
+    
+    return Response(combined_bookings)
+
+
+@api_view(['GET'])
+def get_user_reviews(request, user_id):
+    reviews = Review.objects.filter(user_id=user_id).order_by('-created_at')
+    serializer = ReviewSerializer(reviews, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+def get_provider_reviews(request, provider_id):
+    reviews = Review.objects.filter(provider_id=provider_id, status='approved').order_by('-created_at')
+    serializer = ReviewSerializer(reviews, many=True)
+    return Response(serializer.data)

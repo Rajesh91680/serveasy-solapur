@@ -112,7 +112,7 @@ export function UserProfile() {
     if (!/^\d{10}$/.test(phone.trim())) return;
 
     try {
-      const res = await axios.put(`${API_URL}users/${currentUser.id}/`, {
+      const res = await axios.put(`${API_URL}users/${currentUser.id}/update/`, {
         name: name.trim(),
         phone: phone.trim(),
         email: currentUser.email,
@@ -146,7 +146,7 @@ export function UserProfile() {
     }
 
     try {
-      const res = await axios.post(`${API_URL}users/${currentUser.id}/addresses/`, {
+      const res = await axios.post(`${API_URL}addresses/create/`, {
         user: currentUser.id,
         address_type: title.trim().toLowerCase(),
         address_line1: line1.trim(),

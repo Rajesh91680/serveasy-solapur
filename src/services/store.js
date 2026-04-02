@@ -1,8 +1,17 @@
-// Dummy store.js to allow compiling admin pages without refactoring them yet.
-// All user pages should use direct axios calls.
+// Real store.js using sessionStorage for persistent state
+// All user pages should use direct axios calls for data.
 
 export const getCurrentUser = () => JSON.parse(sessionStorage.getItem('currentUser') || 'null');
-export const setCurrentUser = (user) => sessionStorage.setItem('currentUser', JSON.stringify(user));
+export const setCurrentUser = (user) => {
+    if (user) {
+        sessionStorage.setItem('currentUser', JSON.stringify(user));
+    } else {
+        sessionStorage.removeItem('currentUser');
+    }
+    // Dispatch event to notify components
+    window.dispatchEvent(new Event("authChange"));
+};
+
 export const getBookings = () => [];
 export const saveBookings = () => {};
 export const getUsers = () => [];
@@ -14,11 +23,21 @@ export const saveServices = () => {};
 export const addUserAddress = () => {};
 export const setDefaultAddress = () => {};
 export const getDefaultAddress = () => null;
-export const login = async () => ({ user: null });
-export const register = async () => {};
-export const addBooking = () => {};
-export const isAdminLoggedIn = () => false;
-export const setAdminLoggedIn = () => {};
-export const loginUser = async () => ({ user: null });
+
+export const isAdminLoggedIn = () => sessionStorage.getItem('adminLoggedIn') === 'true';
+export const setAdminLoggedIn = (status) => {
+    if (status) {
+        sessionStorage.setItem('adminLoggedIn', 'true');
+    } else {
+        sessionStorage.removeItem('adminLoggedIn');
+    }
+};
+
+export const loginUser = async (email, password) => {
+    // This is now just a wrapper for the API if needed, 
+    // but components should use axios directly.
+    return { user: null };
+};
+
 export const getRatings = () => [];
 export const updateRatingStatus = () => {};

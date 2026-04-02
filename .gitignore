@@ -1,27 +1,32 @@
-# Python
-**/__pycache__/
-*.pyc
-*.pyo
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
-
-# Virtual Environment
-venv/
-backend/venv/
-
-# Django
+# Django stuff:
+local_settings.py
 db.sqlite3
-backend/media/
+db.sqlite3-journal
+
+# Database migrations
+# (Optional: remove this if you want to commit migrations)
+# */migrations/*.py
+# !*/migrations/__init__.py
+
+# Static and media files
+static/
+media/
+staticfiles/
 
 # Environment variables
 .env
 
 # Node
 node_modules/
-build/
+
+# Python virtual environment
+venv/
+backend/venv/
 
 # OS
 .DS_Store

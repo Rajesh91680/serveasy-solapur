@@ -2,10 +2,13 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Home, Eye, EyeOff } from "lucide-react";
 import {
-  loginUser,
   setCurrentUser,
   setAdminLoggedIn,
 } from "../../../services/store";
+
+import axios from "axios";
+
+const API_URL = "http://127.0.0.1:8000/api/";
 
 function AdminLogin() {
   const navigate = useNavigate();
@@ -14,21 +17,35 @@ function AdminLogin() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
-    const found = loginUser(email.trim(), password);
+    try {
+      const res = await axios.post(API_URL + "auth/login/", {
+        email: email.trim(),
+        password: password,
+      });
 
-    if (!found || found.role !== "admin") {
-      setError("Invalid admin credentials.");
-      return;
+      const user = res.data.user || res.data;
+
+      if (user.role !== "admin") {
+        setError("Invalid admin credentials. This account is not an administrator.");
+        setLoading(false);
+        return;
+      }
+
+      setCurrentUser(user);
+      setAdminLoggedIn(true);
+      navigate("/admin");
+    } catch (err) {
+      setError(err.response?.data?.error || "Invalid login credentials.");
+    } finally {
+      setLoading(false);
     }
-
-    setCurrentUser(found);
-    setAdminLoggedIn(true);
-    navigate("/admin");
   };
 
   return (
@@ -183,20 +200,21 @@ function AdminLogin() {
 
           {/* Submit */}
           <button
+            disabled={loading}
             type="submit"
             style={{
               width: "100%",
               padding: "13px",
-              backgroundColor: "#1A3C6E",
+              backgroundColor: loading ? "#94A3B8" : "#1A3C6E",
               color: "white",
               border: "none",
               borderRadius: "10px",
               fontSize: "16px",
               fontWeight: 700,
-              cursor: "pointer",
+              cursor: loading ? "not-allowed" : "pointer",
             }}
           >
-            Sign In as Admin
+            {loading ? "Authenticating..." : "Sign In as Admin"}
           </button>
         </form>
       </div>
