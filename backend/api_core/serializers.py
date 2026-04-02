@@ -34,22 +34,12 @@ class RegisterSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
-        password = validated_data.pop('password')
-
-        user = User.objects.create(**validated_data)
-        user.password = password
-        user.save()
-
-        return user
-
-    def create(self, validated_data):
         # Remove password temporarily
-        password = validated_data.pop('password')
-
+        password = validated_data.pop('password', None)
         user = User.objects.create(**validated_data)
-        user.password = password  # (you can hash later)
-        user.save()
-
+        if password:
+            user.password = password  # (you can hash later)
+            user.save()
         return user
         
 class LoginSerializer(serializers.Serializer):
@@ -75,7 +65,7 @@ class ProviderSerializer(serializers.ModelSerializer):
 
 
 # -------------------------
-# Address Serializer (UPDATED ✅)
+# Address Serializer
 # -------------------------
 class AddressSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.name', read_only=True)
@@ -84,8 +74,8 @@ class AddressSerializer(serializers.ModelSerializer):
         model = Address
         fields = [
             'id',
-            'user',          # ✅ ForeignKey now
-            'user_name',     # ✅ extra helpful field
+            'user',
+            'user_name',
             'address_type',
             'address_line1',
             'address_line2',
@@ -100,7 +90,7 @@ class AddressSerializer(serializers.ModelSerializer):
 
 
 # -------------------------
-# NEW SERIALIZERS (✅)
+# NEW SERIALIZERS
 # -------------------------
 class ProviderStatusSerializer(serializers.ModelSerializer):
     provider_name = serializers.CharField(source='provider.name', read_only=True)

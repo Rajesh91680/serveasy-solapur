@@ -79,9 +79,11 @@ class Address(models.Model):
 # -------------------------
 class Service(models.Model):
     name = models.CharField(max_length=100)
+    category = models.CharField(max_length=100, blank=True)
     description = models.TextField(blank=True)
     icon = models.CharField(max_length=100, blank=True)
     image_url = models.URLField(blank=True, null=True)
+    status = models.CharField(max_length=20, default="active")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -95,26 +97,36 @@ class Service(models.Model):
 # Provider Model
 # -------------------------
 class Provider(models.Model):
-    service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name='providers')
+    service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name='providers', null=True, blank=True)
     name = models.CharField(max_length=100)
+    specialty = models.CharField(max_length=100, blank=True)
     rating = models.FloatField(default=0.0)
+    reviews = models.IntegerField(default=0)
     experience = models.IntegerField(default=0)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     location = models.CharField(max_length=255)
     phone = models.CharField(max_length=15)
+    
+    # Images
     avatar_url = models.URLField(blank=True, null=True)
+    photo = models.ImageField(upload_to="providers/", null=True, blank=True)
+    aadhaar_image = models.ImageField(upload_to="aadhaar/", null=True, blank=True)
+    
     is_verified = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, default="active")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.name} - {self.service.name}"
+        if self.service:
+            return f"{self.name} - {self.service.name}"
+        return self.name
 
     class Meta:
         db_table = 'provider'
 
 
 # -------------------------
-# Provider Status Model (NEW ✅)
+# Provider Status Model
 # -------------------------
 class ProviderStatus(models.Model):
     provider = models.ForeignKey(Provider, on_delete=models.CASCADE)
@@ -134,7 +146,7 @@ class ProviderStatus(models.Model):
 
 
 # -------------------------
-# Booking Model (NEW ✅)
+# Booking Model
 # -------------------------
 class Booking(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -150,3 +162,4 @@ class Booking(models.Model):
 
     class Meta:
         db_table = 'booking'
+

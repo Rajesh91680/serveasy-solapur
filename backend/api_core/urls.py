@@ -21,7 +21,6 @@ urlpatterns = [
     path('services/', views.get_services, name='get_services'),
     path('services/<int:pk>/', views.get_service_detail, name='service_detail'),
 
-
     # -------------------------
     # Providers
     # -------------------------
@@ -31,17 +30,17 @@ urlpatterns = [
 
 
     # -------------------------
-    # Addresses (UPDATED ✅)
+    # Addresses (UPDATED)
     # -------------------------
     path('addresses/', views.get_all_addresses, name='get_all_addresses'),   # GET
     path('addresses/create/', views.create_address, name='create_address'),  # POST
 
-    path('addresses/user/<int:user_id>/', views.get_user_addresses, name='user_addresses'),  # ✅ FIXED
+    path('addresses/user/<int:user_id>/', views.get_user_addresses, name='user_addresses'),
     path('addresses/<int:pk>/', views.address_detail, name='address_detail'),  # GET, PUT, DELETE
 
 
     # -------------------------
-    # Provider Status (NEW ✅)
+    # Provider Status (NEW)
     # -------------------------
     path('provider-status/<int:provider_id>/wa-sent/', views.save_wa_sent, name='save_wa_sent'),
     path('provider-status/<int:provider_id>/response/', views.save_provider_response, name='save_provider_response'),
@@ -50,9 +49,24 @@ urlpatterns = [
 
 
     # -------------------------
-    # Bookings (NEW ✅)
+    # Bookings (NEW)
     # -------------------------
     path('bookings/create/', views.create_booking, name='create_booking'),
     path('respond/', views.respond_via_link, name='respond_via_link'),
     
+    # -------------------------
+    # Admin & Service Management
+    # -------------------------
+    path('services', views.create_service),
+    path('services/<int:id>', views.update_service),
+    path('services/delete/<int:id>', views.delete_service),
+    path('services/all', views.get_services),
+
+    # -------------------------
+    # Admin & Provider Management
+    # -------------------------
+    path('providers', views.create_provider),
+    path('providers/<int:id>', views.update_provider),
+    path('providers/delete/<int:id>', views.delete_provider),
+    path('providers/all', views.get_providers),
 ]
