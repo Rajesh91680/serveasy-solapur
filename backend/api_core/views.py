@@ -36,10 +36,6 @@ def register(request):
         if existing_user.is_verified:
             return Response({'error': 'User already exists. Please login.'}, status=400)
 
-        email_conflict = User.objects.filter(email=email).exclude(id=existing_user.id).first()
-        if email_conflict:
-            return Response({'error': 'This email is already used by another account.'}, status=400)
-
         otp = generate_otp()
         existing_user.email = email
         existing_user.phone = phone
@@ -143,11 +139,10 @@ def update_user(request, id):
 
 
 # -------------------------
-# Admin User List (from rajesh-branch)
+# Admin User List
 # -------------------------
 @api_view(['GET'])
 def get_admin_users(request):
-    # Exclude admins or just fetch all
     users = User.objects.all().order_by('-id')
     serializer = UserSerializer(users, many=True)
     return Response(serializer.data)
@@ -272,7 +267,7 @@ def delete_provider(request, id):
 
 
 # -------------------------
-# Provider Status & Actions (monika-new)
+# Provider Status & Actions
 # -------------------------
 
 @api_view(['PATCH'])
@@ -377,7 +372,7 @@ def address_detail(request, pk):
 
 
 # -------------------------
-# Bookings (from monika-new branch)
+# Bookings
 # -------------------------
 
 @api_view(['POST'])
@@ -390,15 +385,12 @@ def create_booking(request):
 
 
 # -------------------------
-# Reviews (NEW from rajesh-branch)
+# Reviews
 # -------------------------
 
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
 def submit_review(request):
-    # FormData sends all values as strings, but the serializer expects
-    # integer pk values for ForeignKey fields (user, provider).
-    # Create a mutable copy and convert them to integers.
     data = request.data.copy()
     if 'user' in data:
         try:
@@ -440,7 +432,6 @@ def update_review_status(request, id):
         review.status = new_status
         review.save()
 
-        # Update average rating of provider if approved
         if new_status == 'approved':
             provider = review.provider
             approved_reviews = Review.objects.filter(provider=provider, status='approved')
@@ -457,7 +448,7 @@ def update_review_status(request, id):
 
 
 # -------------------------
-# Admin Dashboard Stats (NEW from rajesh-branch)
+# Admin Dashboard Stats (Updated)
 # -------------------------
 
 @api_view(['GET'])
@@ -466,9 +457,15 @@ def admin_dashboard_stats(request):
     total_providers = Provider.objects.count()
     active_providers = Provider.objects.filter(status="active").count()
     
-    # Try using ServiceRequest or Booking
-    total_requests = ServiceRequest.objects.count()
-    completed_requests = ServiceRequest.objects.filter(status="completed").count()
+    # Calculate total requests from both Booking and ServiceRequest tables
+    booking_count = Booking.objects.count()
+    request_count = ServiceRequest.objects.count()
+    total_requests = booking_count + request_count
+    
+    # Completed requests from both
+    comp_bookings = Booking.objects.filter(status__iexact="completed").count()
+    comp_requests = ServiceRequest.objects.filter(status__iexact="completed").count()
+    completed_requests = comp_bookings + comp_requests
     
     total_reviews = Review.objects.count()
 
@@ -484,41 +481,84 @@ def admin_dashboard_stats(request):
 
 
 # -------------------------
-# Service Requests / Bookings (rajesh-branch style)
+# Admin Service Requests List (Updated for UI Fix)
 # -------------------------
 
 @api_view(['GET'])
 def get_service_requests(request):
-    requests = ServiceRequest.objects.all().order_by('-id')
-    serializer = ServiceRequestSerializer(requests, many=True)
-    return Response(serializer.data)
+    # Fetch data from BOTH tables
+    bookings = Booking.objects.all().order_by('-created_at')
+    service_reqs = ServiceRequest.objects.all().order_by('-created_at')
+    
+    combined_list = []
+
+    # Process Data from Booking Table
+    for b in bookings:
+        combined_list.append({
+            'id': b.id,
+            'customer': b.user.name, # Standardized key for React
+            'service': b.service,
+            'service_name': b.service,
+            'date': b.created_at.strftime('%Y-%m-%d'),
+            'time': b.created_at.strftime('%I:%M %p'),
+            'status': b.status.lower(), # IMPORTANT: must be 'pending' or 'requested' in lowercase
+            'type': 'booking'
+        })
+
+    # Process Data from ServiceRequest Table
+    for sr in service_reqs:
+        combined_list.append({
+            'id': sr.id,
+            'customer': sr.user.name,
+            'service': sr.service_name,
+            'service_name': sr.service_name,
+            'date': str(sr.date),
+            'time': sr.time,
+            'status': sr.status.lower(), # Standardizing status for filters
+            'type': 'service_request'
+        })
+
+    # Sort by ID descending
+    combined_list.sort(key=lambda x: x['id'], reverse=True)
+    
+    return Response(combined_list)
 
 
 @api_view(['PUT'])
 def update_service_status(request, id):
-    try:
-        service_req = ServiceRequest.objects.get(id=id)
-        service_req.status = request.data.get('status', service_req.status)
+    """
+    Attempts to update status in Booking first, then ServiceRequest.
+    """
+    new_status = request.data.get('status')
+    
+    # Try updating Booking table first
+    booking = Booking.objects.filter(id=id).first()
+    if booking:
+        booking.status = new_status
+        booking.save()
+        return Response({"message": "Booking status updated", "status": booking.status})
+        
+    # If not in Booking, try ServiceRequest table
+    service_req = ServiceRequest.objects.filter(id=id).first()
+    if service_req:
+        service_req.status = new_status
         service_req.save()
-        return Response({"message": "Status updated successfully", "status": service_req.status})
-    except ServiceRequest.DoesNotExist:
-        return Response({"error": "Request not found"}, status=404)
+        return Response({"message": "Service Request status updated", "status": service_req.status})
+        
+    return Response({"error": "Request not found"}, status=404)
+
+
 # -------------------------
 # User Specific Data (Bookings & Reviews)
 # -------------------------
 
 @api_view(['GET'])
 def get_user_bookings(request, user_id):
-    # Fetch from both Booking and ServiceRequest to be safe, 
-    # but primarily ServiceRequest seems to be the newer model.
-    # We will try to harmonize the fields for the frontend.
-    
     bookings = Booking.objects.filter(user_id=user_id).order_by('-created_at')
     service_requests = ServiceRequest.objects.filter(user_id=user_id).order_by('-created_at')
     
     combined_bookings = []
     
-    # Process Bookings
     for b in bookings:
         combined_bookings.append({
             'id': b.id,
@@ -529,11 +569,10 @@ def get_user_bookings(request, user_id):
             'providers': b.providers,
             'status': b.status,
             'date': b.created_at.strftime('%Y-%m-%d'),
-            'time': b.created_at.strftime('%H:%M %p'),
+            'time': b.created_at.strftime('%I:%M %p'),
             'created_at': b.created_at
         })
         
-    # Process Service Requests
     for sr in service_requests:
         combined_bookings.append({
             'id': sr.id,
@@ -545,13 +584,11 @@ def get_user_bookings(request, user_id):
             'time': sr.time,
             'status': sr.status,
             'description': sr.description,
-            'address': "Address not specified", # ServiceRequest lacks address field
+            'address': "Address not specified",
             'created_at': sr.created_at
         })
         
-    # Sort by created_at
     combined_bookings.sort(key=lambda x: x['created_at'], reverse=True)
-    
     return Response(combined_bookings)
 
 

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 
 const API_URL = "http://127.0.0.1:8000/api/";
-const PUBLIC_URL = "https://unmurmured-hermine-turgent.ngrok-free.dev";
+const PUBLIC_URL = "https://petalodic-unmisguidedly-shakia.ngrok-free.dev";
 
 
 const getCurrentUser = () => {

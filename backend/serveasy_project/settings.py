@@ -8,11 +8,17 @@ SECRET_KEY = 'django-insecure-6k=2_82et=fe+%on7is=f1p!)05etgv#+w!imbfqy^jx!qaa6#
 
 DEBUG = True
 
-ALLOWED_HOSTS = [
-    '127.0.0.1',
-    'localhost',
-    'unmurmured-hermine-turgent.ngrok-free.dev'
+# --- UPDATED SECTION ---
+# Allowed hosts set to '*' allows any ngrok link to connect easily during development
+ALLOWED_HOSTS = ['*']
+
+# This tells Django to trust the ngrok tunnel for security (CSFR)
+CSRF_TRUSTED_ORIGINS = [
+    'https://petalodic-unmisguidedly-shakia.ngrok-free.dev',
+    'https://*.ngrok-free.app',
+    'https://*.ngrok-free.dev'
 ]
+# -----------------------
 
 # Application definition
 

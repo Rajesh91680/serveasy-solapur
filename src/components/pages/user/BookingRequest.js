@@ -2,11 +2,54 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Bell, Calendar, Clock, User, Home } from "lucide-react";
 import { Navbar } from "../../Navbar";
 import { Footer } from "../../Footer";
+import axios from "axios"; 
+import { useState, useEffect } from "react";
+
+// Define the API URL (use your ngrok link here if testing on mobile)
+const API_URL = "http://127.0.0.1:8000/api/";
 
 function BookingRequest() {
   const { state = {} } = useLocation();
   const { service, date, time, address, providers, bookingId } = state;
   const navigate = useNavigate();
+
+  // State to track if the data is saved to avoid multiple duplicate saves
+  const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    const saveBookingToDb = async () => {
+      // 1. Get the current logged-in user from sessionStorage
+      const userStr = sessionStorage.getItem("currentUser");
+      const currentUser = userStr ? JSON.parse(userStr) : null;
+
+      // 2. Only attempt to save if we have a user and haven't saved already
+      if (currentUser && currentUser.id && !isSaved && service) {
+        try {
+          // Prepare the data according to your Django Booking model
+          const bookingData = {
+            user: currentUser.id, // Linking the booking to the logged-in user (e.g., ID 5)
+            service: service,
+            address: address || "No address provided",
+            description: `Scheduled for ${date} at ${time}`,
+            providers: providers || [], // List of selected provider names/IDs
+            status: "pending"
+          };
+
+          // 3. Send POST request to Backend
+          const response = await axios.post(`${API_URL}bookings/create/`, bookingData);
+          
+          console.log("Booking saved successfully in PostgreSQL:", response.data);
+          setIsSaved(true); // Mark as saved to prevent duplicate entries on re-render
+        } catch (error) {
+          console.error("Error saving booking:", error.response?.data || error.message);
+        }
+      } else if (!currentUser) {
+        console.error("No user found in session. Please login again.");
+      }
+    };
+
+    saveBookingToDb();
+  }, [service, date, time, address, providers, isSaved]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -52,6 +95,7 @@ function BookingRequest() {
             Provider will respond soon.
           </p>
 
+          {/* Display Booking Details */}
           <div
             className="text-left space-y-4 mb-8 p-6 rounded-2xl"
             style={{ background: "#F8FAFC" }}
@@ -156,12 +200,12 @@ function BookingRequest() {
           </div>
 
           <button
-  onClick={() => navigate("/profile")}
-  className="w-full py-3 rounded-xl font-semibold text-white"
-  style={{ background: "#F97316" }}
->
-  Go to My Booking
-</button>
+            onClick={() => navigate("/profile")}
+            className="w-full py-3 rounded-xl font-semibold text-white"
+            style={{ background: "#F97316" }}
+          >
+            Go to My Booking
+          </button>
         </div>
       </div>
 
