@@ -1,7 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import "./App.css";
 
-/* USER */
 import { Home } from "./components/pages/user/Home";
 import Booking from "./components/pages/user/Booking";
 import ProviderList from "./components/pages/user/ProviderList";
@@ -27,8 +26,7 @@ function App() {
   return (
     <Router>
       <Routes>
-
-        {/* ================= USER ROUTES ================= */}
+        {/* USER */}
         <Route path="/" element={<Home />} />
         <Route path="/booking/:serviceId?" element={<Booking />} />
         <Route path="/providers" element={<ProviderList />} />
@@ -37,29 +35,21 @@ function App() {
         <Route path="/service-completed" element={<ServiceCompleted />} />
         <Route path="/profile" element={<UserProfile />} />
 
-        {/* ================= ADMIN LOGIN ================= */}
+        {/* ADMIN LOGIN */}
         <Route path="/admin/login" element={<AdminLogin />} />
 
-        {/* ================= ADMIN PANEL ================= */}
+        {/* ADMIN PANEL */}
         <Route path="/admin" element={<AdminLayout />}>
-
           <Route index element={<AdminDashboard />} />
-
           <Route path="bookings" element={<AdminRequests />} />
           <Route path="providers" element={<AdminProviders />} />
           <Route path="providers/add" element={<AdminAddProvider />} />
           <Route path="providers/:id" element={<AdminProviderDetail />} />
-
           <Route path="customers" element={<AdminCustomers />} />
           <Route path="ratings" element={<AdminRatings />} />
           <Route path="services" element={<AdminServices />} />
           <Route path="settings" element={<AdminSettings />} />
-
         </Route>
-
-        {/* ================= 404 PAGE ================= */}
-        <Route path="*" element={<h2 style={{ textAlign: "center" }}>404 Page Not Found</h2>} />
-
       </Routes>
     </Router>
   );

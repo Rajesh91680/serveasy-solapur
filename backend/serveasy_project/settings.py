@@ -129,7 +129,7 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         # "NAME": "serveasy_db",
-        "NAME": "serveeasy_db",   # ✅ THIS MUST MATCH
+        "NAME": "service-requests",   # ✅ THIS MUST MATCH
         "USER": "postgres",
         "PASSWORD": "1234",   # ← change if needed
         "HOST": "127.0.0.1",

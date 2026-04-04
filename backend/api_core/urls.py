@@ -1,16 +1,25 @@
+# from django.urls import path
+# from . import views
+
+# urlpatterns = [
+#     # GET  — returns all providers for React dropdown
+#     path("providers/",        views.get_providers, name="get_providers"),
+
+#     # POST — ProviderList.js posts to this URL:
+#     #        fetch(`${API_BASE}/api/service-requests/`, { method:"POST", ... })
+#     path("service-requests/", views.book_service,  name="book_service"),
+
+#     # GET  — debug: see all saved bookings
+#     path("bookings/",         views.get_bookings,  name="get_bookings"),
+# ]
+
+
+
+
+
 from django.urls import path
 from . import views
 
 urlpatterns = [
-
-    # SERVICE REQUEST
-    path("service-requests/", views.ServiceRequestListCreate.as_view()),
-    path("service-requests/user/<int:user_id>/", views.ServiceRequestByUser.as_view()),
-    path("service-requests/provider/<int:provider_id>/", views.ServiceRequestByProvider.as_view()),
-    path("service-requests/<int:pk>/", views.ServiceRequestDetail.as_view()),
-
-    # REVIEWS
-    path("reviews/", views.ReviewListCreate.as_view()),
-    path("reviews/provider/<int:provider_id>/", views.ReviewByProvider.as_view()),
-    path("reviews/<int:pk>/", views.ReviewDetail.as_view()),
+    path("service-requests/", views.service_requests, name="service_requests"),
 ]

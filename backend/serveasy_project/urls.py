@@ -1,14 +1,9 @@
 from django.contrib import admin
 from django.urls import path, include
-from django.http import HttpResponse
-
-
-def home(request):
-    return HttpResponse("ServeEasy Backend Running ✅")
-
+from api_core.views import home   # simple homepage so / doesn't 404
 
 urlpatterns = [
+    path("",       home),                        # GET / → "API is running"
     path("admin/", admin.site.urls),
-    path("", home),
-    path("api/", include("api_core.urls")),
+    path("api/",   include("api_core.urls")),    # all API routes under /api/
 ]

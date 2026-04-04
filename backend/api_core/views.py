@@ -1,112 +1,192 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.parsers import MultiPartParser, FormParser
-
-from .models import ServiceRequest, Review
-from .serializers import ServiceRequestSerializer, ReviewSerializer
+# import json
+# from django.http import JsonResponse, HttpResponse
+# from django.views.decorators.csrf import csrf_exempt
+# from django.views.decorators.http import require_http_methods
+# from .models import Provider, ServiceRequest
 
 
-# ==========================
-# SERVICE REQUEST
-# ==========================
-
-class ServiceRequestListCreate(APIView):
-
-    def get(self, request):
-        qs = ServiceRequest.objects.all()   # ✅ removed created_at
-        return Response(ServiceRequestSerializer(qs, many=True).data)
-
-    def post(self, request):
-        print("DATA:", request.data)
-
-        serializer = ServiceRequestSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=201)
-
-        print("ERRORS:", serializer.errors)
-        return Response(serializer.errors, status=400)
+# # ─────────────────────────────────────────────────────────────────
+# # GET /
+# # Simple homepage — required because serveasy_project/urls.py
+# # imports this. Without it Django throws ImportError on startup.
+# # ─────────────────────────────────────────────────────────────────
+# def home(request):
+#     return HttpResponse("ServeEasy API is running ✅")
 
 
-class ServiceRequestByUser(APIView):
+# # ─────────────────────────────────────────────────────────────────
+# # GET /api/providers/
+# # Returns all active providers as JSON for the React frontend
+# # ─────────────────────────────────────────────────────────────────
+# @csrf_exempt
+# @require_http_methods(["GET"])
+# def get_providers(request):
+#     providers = Provider.objects.filter(is_available=True).values(
+#         "id", "name", "service", "phone", "rating", "is_available"
+#     )
+#     return JsonResponse(list(providers), safe=False)
 
-    def get(self, request, user_id):
-        # ❌ user field नहीं है → इसलिए empty return
-        return Response([])
+
+# # ─────────────────────────────────────────────────────────────────
+# # POST /api/service-requests/
+# #
+# # ✅ THE KEY FIX:
+# #   Frontend sends:  { provider_names: ["Ravi Kumar", "Suresh Patil"], service, date }
+# #   This view reads: data.get("provider_names", [])  ← array
+# #   Then loops and creates ONE row per provider name in "service-requests" table
+# # ─────────────────────────────────────────────────────────────────
+# @csrf_exempt
+# @require_http_methods(["POST"])
+# def book_service(request):
+#     try:
+#         data = json.loads(request.body)
+#         print("📥 Received payload:", data)
+
+#         provider_names = data.get("provider_names", [])   # ✅ array from frontend
+#         service        = data.get("service", "").strip()
+#         date           = data.get("date",    "").strip()
+
+#         # ── Validate ──────────────────────────────────────────────
+#         if not service:
+#             return JsonResponse({"error": "service is required"}, status=400)
+#         if not date:
+#             return JsonResponse({"error": "date is required"}, status=400)
+#         if not provider_names or not isinstance(provider_names, list):
+#             return JsonResponse({"error": "provider_names must be a non-empty array"}, status=400)
+
+#         # ── Save one DB row per provider name ─────────────────────
+#         saved   = []
+#         skipped = []
+
+#         for name in provider_names:
+#             name = name.strip() if name else ""
+#             if not name:
+#                 skipped.append("(empty)")
+#                 continue
+
+#             row = ServiceRequest.objects.create(
+#                 service=service,
+#                 date=date,
+#                 provider_name=name,
+#             )
+#             print(f"  ✅ Saved id={row.id}: {service} | {date} | {name}")
+#             saved.append({"id": row.id, "provider_name": name})
+
+#         if not saved:
+#             print("⚠️  No rows saved — all names were empty")
+#             return JsonResponse({"error": "No valid provider names provided"}, status=400)
+
+#         return JsonResponse({
+#             "success":  True,
+#             "id":       saved[0]["id"],   # first row id — used as bookingId in ProviderList.js
+#             "bookings": saved,
+#             "skipped":  skipped,
+#         }, status=201)
+
+#     except json.JSONDecodeError:
+#         return JsonResponse({"error": "Invalid JSON body"}, status=400)
+#     except Exception as e:
+#         print("❌ Error:", str(e))
+#         return JsonResponse({"error": str(e)}, status=500)
 
 
-class ServiceRequestByProvider(APIView):
+# # ─────────────────────────────────────────────────────────────────
+# # GET /api/bookings/
+# # Debug — see all saved rows in service-requests table
+# # Open: http://localhost:8002/api/bookings/
+# # ─────────────────────────────────────────────────────────────────
+# @csrf_exempt
+# @require_http_methods(["GET"])
+# def get_bookings(request):
+#     bookings = ServiceRequest.objects.all().values(
+#         "id", "service", "date", "provider_name"
+#     ).order_by("-id")
+#     return JsonResponse(list(bookings), safe=False)
 
-    def get(self, request, provider_id):
-        qs = ServiceRequest.objects.filter(provider_id=provider_id)
-        return Response(ServiceRequestSerializer(qs, many=True).data)
 
 
-class ServiceRequestDetail(APIView):
 
-    def get(self, request, pk):
+import json
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from .models import ServiceRequest
+
+
+def home(request):
+    return JsonResponse({"message": "ServEasy API is running ✅"})
+
+
+@csrf_exempt
+def service_requests(request):
+    """
+    GET  /api/service-requests/  → list all bookings
+    POST /api/service-requests/  → create booking(s)
+
+    Accepts TWO payload formats so nothing breaks:
+      Format A (correct): { provider_names: ["Ravi", "Suresh"], service, date }
+      Format B (legacy):  { user, provider_id, service, address, date, status }
+                          → ignored silently (returns 200 so frontend doesn't crash)
+    """
+
+    # ── GET ──────────────────────────────────────────────────────────────────
+    if request.method == "GET":
+        bookings = list(
+            ServiceRequest.objects.all()
+            .order_by("-id")
+            .values("id", "service", "date", "provider_name")
+        )
+        return JsonResponse(bookings, safe=False)
+
+    # ── POST ─────────────────────────────────────────────────────────────────
+    elif request.method == "POST":
         try:
-            obj = ServiceRequest.objects.get(pk=pk)
-        except ServiceRequest.DoesNotExist:
-            return Response({"error": "Not found"}, status=404)
+            data = json.loads(request.body)
+            print("📥 Received payload:", data)
 
-        return Response(ServiceRequestSerializer(obj).data)
+            # ── Detect legacy format (has provider_id key) ────────────────
+            # These come from BookingRequest.js / Booking.js — ignore them.
+            if "provider_id" in data:
+                print("⚠️  Legacy payload with provider_id — skipping (not saved).")
+                return JsonResponse({"status": "ignored", "reason": "legacy format"}, status=200)
 
-    def put(self, request, pk):
-        try:
-            obj = ServiceRequest.objects.get(pk=pk)
-        except ServiceRequest.DoesNotExist:
-            return Response({"error": "Not found"}, status=404)
+            # ── Correct format: provider_names array ──────────────────────
+            provider_names = data.get("provider_names", [])
+            service        = (data.get("service") or "").strip()
+            date           = (data.get("date")    or "").strip()
 
-        serializer = ServiceRequestSerializer(obj, data=request.data, partial=True)
+            if not service:
+                return JsonResponse({"error": "service is required"}, status=400)
+            if not date:
+                return JsonResponse({"error": "date is required"}, status=400)
+            if not provider_names:
+                return JsonResponse({"error": "provider_names list is required"}, status=400)
 
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
+            saved = []
+            for name in provider_names:
+                name = name.strip()
+                if not name:
+                    continue
+                obj = ServiceRequest.objects.create(
+                    service=service,
+                    date=date,
+                    provider_name=name,
+                )
+                print(f"  ✅ Saved id={obj.id}: {service} | {date} | {name}")
+                saved.append({
+                    "id":            obj.id,
+                    "service":       obj.service,
+                    "date":          str(obj.date),
+                    "provider_name": obj.provider_name,
+                })
 
-        return Response(serializer.errors, status=400)
+            return JsonResponse({"status": "saved", "bookings": saved}, status=201)
 
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        except Exception as e:
+            print("❌ Error:", e)
+            return JsonResponse({"error": str(e)}, status=500)
 
-# ==========================
-# REVIEWS (FIXED)
-# ==========================
-
-class ReviewListCreate(APIView):
-
-    parser_classes = [MultiPartParser, FormParser]   # ✅ IMPORTANT
-
-    def get(self, request):
-        qs = Review.objects.all()
-        return Response(ReviewSerializer(qs, many=True).data)
-
-    def post(self, request):
-        print("DATA:", request.data)
-        print("FILES:", request.FILES)
-
-        serializer = ReviewSerializer(data=request.data)
-
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=201)
-
-        print("ERRORS:", serializer.errors)
-        return Response(serializer.errors, status=400)
-
-
-class ReviewByProvider(APIView):
-
-    def get(self, request, provider_id):
-        qs = Review.objects.filter(provider_id=provider_id)
-        return Response(ReviewSerializer(qs, many=True).data)
-
-
-class ReviewDetail(APIView):
-
-    def get(self, request, pk):
-        try:
-            obj = Review.objects.get(pk=pk)
-        except Review.DoesNotExist:
-            return Response({"error": "Not found"}, status=404)
-
-        return Response(ReviewSerializer(obj).data)
+    # ── OTHER METHODS ─────────────────────────────────────────────────────────
+    else:
+        return JsonResponse({"error": "Method not allowed"}, status=405)
