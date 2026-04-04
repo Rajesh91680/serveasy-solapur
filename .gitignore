@@ -38,3 +38,8 @@ media/
 # ========================
 .DS_Store
 Thumbs.db
+backend/venv/
+backend/**/__pycache__/
+backend/**/*.pyc
+*.pyc
+__pycache__/
