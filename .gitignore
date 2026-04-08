@@ -3,6 +3,11 @@
 *.pyc
 *.pyo
 
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
 # Virtual Environment
 venv/
 backend/venv/

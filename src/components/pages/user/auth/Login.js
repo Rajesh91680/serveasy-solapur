@@ -1,148 +1,111 @@
-// import React from "react";
-
-// function Login({
-//   email,
-//   setEmail,
-//   password,
-//   setPassword,
-//   error,
-//   onSubmit,
-//   onSwitch,
-// }) {
-//   return (
-//     <>
-//       <h2 className="text-xl font-semibold text-center mb-4">Login</h2>
-
-//       <form onSubmit={onSubmit} className="flex flex-col gap-3">
-//         <input
-//           className="border p-2 rounded"
-//           placeholder="Email"
-//           value={email}
-//           onChange={(e) => setEmail(e.target.value)}
-//         />
-
-//         <input
-//           className="border p-2 rounded"
-//           type="password"
-//           placeholder="Password"
-//           value={password}
-//           onChange={(e) => setPassword(e.target.value)}
-//         />
-
-//         {error && <p className="text-red-500 text-sm">{error}</p>}
-
-//         <button className="bg-orange-500 text-white py-2 rounded">Login</button>
-//       </form>
-
-//       <p className="text-center mt-3">
-//         No account?
-//         <button onClick={onSwitch} className="text-orange-500 ml-2">
-//           Sign Up
-//         </button>
-//       </p>
-//     </>
-//   );
-// }
-
-// export default Login;
-
-
 import React, { useState } from "react";
-import { GoogleLogin } from "@react-oauth/google";
-import { jwtDecode } from "jwt-decode";
-import { Eye, EyeOff } from "lucide-react";
+import { useNavigate, Link } from "react-router-dom";
+import { Eye, EyeOff, Lock, Mail } from "lucide-react";
+import axios from "axios";
+import Navbar from "../../../Navbar";
 
-function Login({
-  email,
-  setEmail,
-  password,
-  setPassword,
-  error,
-  onSubmit,
-  onSwitch,
-}) {
+const API_URL = "http://127.0.0.1:8000/api/";
+
+/**
+ * LoginPage component
+ */
+function LoginPage({ isModal = false, onSwitch }) {
+  const navigate = useNavigate();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleGoogleSuccess = (credentialResponse) => {
-    const user = jwtDecode(credentialResponse.credential);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(""); setSuccess("");
+    setLoading(true);
 
-    console.log("Google User:", user);
+    try {
+      const res = await axios.post(API_URL + "auth/login/", {
+        email: email.trim(),
+        password: password,
+      });
 
-    // fill email automatically
-    setEmail(user.email);
-
-    // save user
-    localStorage.setItem("user", JSON.stringify(user));
+      const user = res.data.user || res.data;
+      sessionStorage.setItem("currentUser", JSON.stringify(user));
+      window.dispatchEvent(new Event("authChange"));
+      navigate("/address-select");
+    } catch (err) {
+      setError(err.response?.data?.error || "Invalid email or password.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <>
-      <h2 className="text-xl font-semibold text-center mb-4">Login</h2>
+      {!isModal && <Navbar />}
 
-      <form onSubmit={onSubmit} className="flex flex-col gap-3">
-        
-        {/* Email */}
-        <input
-          className="border p-2 rounded"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+      <div className={!isModal ? "min-h-[calc(100vh-80px)] bg-slate-50 flex items-center justify-center p-4" : ""}>
+        <div className={!isModal ? "bg-white p-8 rounded-3xl shadow-xl w-full max-w-[440px] border border-slate-100" : "w-full"}>
+          
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">🔐</div>
+            <h1 className="text-2xl font-bold text-[#1A3C6E]">Welcome Back</h1>
+            <p className="text-slate-500 text-sm mt-1">Login to your ServeEasySolapur account</p>
+          </div>
 
-        {/* Password with eye icon */}
-        <div className="relative">
-          <input
-            className="border p-2 rounded w-full"
-            type={showPassword ? "text" : "password"}
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div className="relative">
+              <Mail className="absolute left-3 top-3.5 w-5 h-5 text-slate-400" />
+              <input 
+                type="email" 
+                placeholder="Email Address" 
+                className="w-full border border-slate-300 p-3 pl-10 rounded-xl outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all font-medium"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
 
-          <button
-            type="button"
-            className="absolute right-3 top-2 text-gray-500"
-            onClick={() => setShowPassword(!showPassword)}
-          >
-            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
+            <div className="relative">
+              <Lock className="absolute left-3 top-3.5 w-5 h-5 text-slate-400" />
+              <input 
+                type={showPassword ? "text" : "password"} 
+                placeholder="Password" 
+                className="w-full border border-slate-300 p-3 pl-10 rounded-xl outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all font-medium"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <button 
+                type="button" 
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3.5 text-slate-400 hover:text-orange-500 transition-colors"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
+
+            {error && <p className="text-red-500 text-sm font-semibold">⚠️ {error}</p>}
+            {success && <p className="text-green-500 text-sm font-semibold">✅ {success}</p>}
+
+            <button disabled={loading} className="bg-orange-500 text-white py-4 rounded-xl font-bold hover:bg-orange-600 transition-all disabled:opacity-50 mt-2 shadow-lg shadow-orange-100">
+              {loading ? "Logging in..." : "Login →"}
+            </button>
+          </form>
+
+          {!isModal && (
+            <div className="text-center mt-6 text-sm text-slate-500">
+              Don't have an account?{" "}
+              <button onClick={onSwitch || (() => navigate("/signup"))} className="text-orange-500 font-bold hover:underline">
+                Sign Up
+              </button>
+            </div>
+          )}
         </div>
-
-        {error && <p className="text-red-500 text-sm">{error}</p>}
-
-        {/* Login button */}
-        <button className="bg-orange-500 text-white py-2 rounded">
-          Login
-        </button>
-      </form>
-
-      {/* Divider */}
-      <div className="flex items-center my-4">
-        <hr className="flex-grow border-gray-300" />
-        <span className="mx-2 text-gray-400 text-sm">OR</span>
-        <hr className="flex-grow border-gray-300" />
       </div>
-
-      {/* Google Login */}
-      <p className="text-center mb-2 font-medium">Login with Google</p>
-
-      <div className="flex justify-center">
-        <GoogleLogin
-          text="signin"
-          onSuccess={handleGoogleSuccess}
-          onError={() => console.log("Google Login Failed")}
-        />
-      </div>
-
-      {/* Sign Up */}
-      <p className="text-center mt-3">
-        No account?
-        <button onClick={onSwitch} className="text-orange-500 ml-2">
-          Sign Up
-        </button>
-      </p>
     </>
   );
 }
 
-export default Login;
+export default LoginPage;

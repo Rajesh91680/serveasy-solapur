@@ -1,63 +1,132 @@
-# views.py
-# This file contains the logic for each API endpoint.
-# It receives the request, processes it, talks to the database, and returns a response.
-# Member 1 - Authentication & Profile
-
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import User
-from .serializers import UserSerializer, RegisterSerializer, LoginSerializer
-from .models import Service, Provider
-from .serializers import ServiceSerializer, ProviderSerializer
+from django.utils.timezone import now
+from django.http import HttpResponse
+from .models import User, Service, Provider, Address, ProviderStatus, Booking
+from .serializers import (
+    UserSerializer, RegisterSerializer, LoginSerializer, 
+    ServiceSerializer, ProviderSerializer, AddressSerializer,
+    ProviderStatusSerializer, BookingSerializer
+)
+from .utils import generate_otp, send_otp_email
 
 
-# POST /api/auth/register
-# Receives signup form data and creates a new user in the database.
-# Used when the user submits the Create Account form.
+# -------------------------
+# Authentication & OTP
+# -------------------------
+
 @api_view(['POST'])
 def register(request):
     serializer = RegisterSerializer(data=request.data)
-    if serializer.is_valid():
-        if User.objects.filter(email=serializer.validated_data['email']).exists():
-            return Response({'error': 'Email already exists.'}, status=status.HTTP_400_BAD_REQUEST)
-        user = serializer.save()
-        return Response({'message': 'User registered successfully.', 'user_id': user.id}, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+
+    email = serializer.validated_data['email']
+    phone = serializer.validated_data['phone']
+
+    existing_user = User.objects.filter(phone=phone).first()
+    if not existing_user:
+        existing_user = User.objects.filter(email=email).first()
+
+    if existing_user:
+        if existing_user.is_verified:
+            return Response({'error': 'User already exists. Please login.'}, status=400)
+
+        email_conflict = User.objects.filter(email=email).exclude(id=existing_user.id).first()
+        if email_conflict:
+            return Response({'error': 'This email is already used by another account.'}, status=400)
+
+        otp = generate_otp()
+        existing_user.email = email
+        existing_user.phone = phone
+        existing_user.name = serializer.validated_data.get('name', existing_user.name)
+        existing_user.email_otp = otp
+        existing_user.otp_created_at = now()
+        existing_user.save()
+
+        send_otp_email(email, otp)
+        return Response({'message': 'OTP resent to existing user', 'user_id': existing_user.id}, status=200)
+
+    if User.objects.filter(email=email).exists():
+        return Response({'error': 'Email already exists.'}, status=400)
+
+    otp = generate_otp()
+    user = serializer.save()
+    user.email_otp = otp
+    user.otp_created_at = now()
+    user.is_verified = False
+    user.save()
+
+    send_otp_email(email, otp)
+    return Response({'message': 'OTP sent to email', 'user_id': user.id}, status=201)
 
 
-# POST /api/auth/login
-# Receives email and password, checks the database, and returns user data if matched.
-# Used when the user submits the Login form.
+@api_view(['POST'])
+def verify_otp(request):
+    user_id = request.data.get('user_id')
+    otp = request.data.get('otp')
+
+    try:
+        user = User.objects.get(id=user_id)
+        if user.email_otp == otp:
+            user.is_verified = True
+            user.email_otp = None
+            user.save()
+            return Response({'message': 'Email verified successfully'}, status=200)
+        return Response({'error': 'Invalid OTP'}, status=400)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=404)
+
+
+@api_view(['POST'])
+def resend_otp(request):
+    user_id = request.data.get('user_id')
+    try:
+        user = User.objects.get(id=user_id)
+        otp = generate_otp()
+        user.email_otp = otp
+        user.otp_created_at = now()
+        user.save()
+        send_otp_email(user.email, otp)
+        return Response({'message': 'OTP resent'}, status=200)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=404)
+
+
 @api_view(['POST'])
 def login(request):
     serializer = LoginSerializer(data=request.data)
     if serializer.is_valid():
-        email    = serializer.validated_data['email']
+        email = serializer.validated_data['email']
         password = serializer.validated_data['password']
+
         try:
-            user = User.objects.get(email=email, password=password)
-            return Response({'message': 'Login successful.', 'user': UserSerializer(user).data}, status=status.HTTP_200_OK)
+            user = User.objects.get(email=email)
+            if user.password != password:
+                return Response({'error': 'Invalid password'}, status=401)
+            if not user.is_verified:
+                return Response({'error': 'Please verify your email first'}, status=403)
+            return Response({'message': 'Login successful.', 'user': UserSerializer(user).data})
         except User.DoesNotExist:
-            return Response({'error': 'Invalid email or password.'}, status=status.HTTP_401_UNAUTHORIZED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'User not found'}, status=404)
+    return Response(serializer.errors, status=400)
 
 
-# GET /api/users/<id>
-# Fetches a single user's profile data by their ID.
-# Used when the user profile page loads.
+# -------------------------
+# User Profile
+# -------------------------
+
 @api_view(['GET'])
 def get_user(request, id):
     try:
         user = User.objects.get(id=id)
-        return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
+        return Response(UserSerializer(user).data)
     except User.DoesNotExist:
-        return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'User not found.'}, status=404)
 
 
-# PUT /api/users/<id>/update
-# Updates an existing user's profile data.
-# Used when the user saves changes on the profile edit page.
 @api_view(['PUT'])
 def update_user(request, id):
     try:
@@ -65,235 +134,236 @@ def update_user(request, id):
         serializer = UserSerializer(user, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
-            return Response({'message': 'Profile updated.', 'user': serializer.data}, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': 'Profile updated.', 'user': serializer.data})
+        return Response(serializer.errors, status=400)
     except User.DoesNotExist:
         return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
-    
-
-# Admin & Service Management
-# ================================
-# IMPORTS
-# ================================
 
 
+# -------------------------
+# Services (Admin & Client)
+# -------------------------
 
-# =========================================================
-# 🔹 SERVICES APIs (Admin Side)
-# =========================================================
+@api_view(['GET'])
+def get_services(request):
+    services = Service.objects.all().order_by('-id')
+    serializer = ServiceSerializer(services, many=True)
+    return Response(serializer.data)
 
-# ----------------------------------------
-# CREATE SERVICE
-# API: POST /api/services
-# ----------------------------------------
+
+@api_view(['GET'])
+def get_service_detail(request, pk):
+    try:
+        service = Service.objects.get(pk=pk)
+        return Response(ServiceSerializer(service).data)
+    except Service.DoesNotExist:
+        return Response({'error': 'Service not found'}, status=404)
+
+
 @api_view(['POST'])
 def create_service(request):
-    """
-    Create a new service
-    Request Body:
-    {
-        "name": "Plumbing",
-        "category": "Home",
-        "description": "Pipe fixing",
-        "status": "active"
-    }
-    """
-
     serializer = ServiceSerializer(data=request.data)
-
-    # Validate data
-    if serializer.is_valid():
-        serializer.save()  # Save to DB using ORM
-        return Response({
-            "message": "Service created successfully",
-            "data": serializer.data
-        }, status=status.HTTP_201_CREATED)
-
-    # If validation fails
-    return Response({
-        "error": serializer.errors
-    }, status=status.HTTP_400_BAD_REQUEST)
-
-
-# ----------------------------------------
-# UPDATE SERVICE
-# API: PUT /api/services/:id
-# ----------------------------------------
-@api_view(['PUT'])
-def update_service(request, id):
-    """
-    Update an existing service by ID
-    """
-
-    try:
-        service = Service.objects.get(id=id)
-    except Service.DoesNotExist:
-        return Response({
-            "error": "Service not found"
-        }, status=status.HTTP_404_NOT_FOUND)
-
-    serializer = ServiceSerializer(service, data=request.data)
-
     if serializer.is_valid():
         serializer.save()
-        return Response({
-            "message": "Service updated successfully",
-            "data": serializer.data
-        })
-
-    return Response({
-        "error": serializer.errors
-    }, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "Service created", "data": serializer.data}, status=201)
+    return Response({"error": serializer.errors}, status=400)
 
 
-# ----------------------------------------
-# DELETE SERVICE
-# API: DELETE /api/services/:id
-# ----------------------------------------
+@api_view(['PUT'])
+def update_service(request, id):
+    try:
+        service = Service.objects.get(id=id)
+        serializer = ServiceSerializer(service, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Service updated", "data": serializer.data})
+        return Response({"error": serializer.errors}, status=400)
+    except Service.DoesNotExist:
+        return Response({"error": "Service not found"}, status=404)
+
+
 @api_view(['DELETE'])
 def delete_service(request, id):
-    """
-    Delete a service by ID
-    """
-
     try:
         service = Service.objects.get(id=id)
         service.delete()
-
-        return Response({
-            "message": "Service deleted successfully"
-        })
-
+        return Response({"message": "Service deleted"})
     except Service.DoesNotExist:
-        return Response({
-            "error": "Service not found"
-        }, status=status.HTTP_404_NOT_FOUND)
+        return Response({"error": "Service not found"}, status=404)
 
 
-# =========================================================
-# 🔹 PROVIDERS APIs (Admin Side)
-# =========================================================
+# -------------------------
+# Providers (Admin & Client)
+# -------------------------
 
-# ----------------------------------------
-# CREATE PROVIDER
-# API: POST /api/providers
-# ----------------------------------------
+@api_view(['GET'])
+def get_providers(request):
+    providers = Provider.objects.all().order_by('-id')
+    serializer = ProviderSerializer(providers, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+def get_providers_by_service(request, service_id):
+    providers = Provider.objects.filter(service_id=service_id)
+    serializer = ProviderSerializer(providers, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+def get_provider_detail(request, pk):
+    try:
+        provider = Provider.objects.get(pk=pk)
+        return Response(ProviderSerializer(provider).data)
+    except Provider.DoesNotExist:
+        return Response({'error': 'Provider not found'}, status=404)
+
+
 @api_view(['POST'])
 def create_provider(request):
-    """
-    Create a new provider (supports image upload)
-    Request Type: multipart/form-data
-    Fields:
-    - name
-    - specialty
-    - location
-    - experience
-    - phone
-    - aadhaar_number
-    - photo (file)
-    - aadhaar_image (file)
-    """
-
     serializer = ProviderSerializer(data=request.data)
-
     if serializer.is_valid():
         serializer.save()
-        return Response({
-            "message": "Provider created successfully",
-            "data": serializer.data
-        }, status=status.HTTP_201_CREATED)
-
-    return Response({
-        "error": serializer.errors
-    }, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "Provider created", "data": serializer.data}, status=201)
+    return Response({"error": serializer.errors}, status=400)
 
 
-# ----------------------------------------
-# UPDATE PROVIDER
-# API: PUT /api/providers/:id
-# ----------------------------------------
 @api_view(['PUT'])
 def update_provider(request, id):
-    """
-    Update provider details by ID
-    """
-
     try:
         provider = Provider.objects.get(id=id)
+        serializer = ProviderSerializer(provider, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Provider updated", "data": serializer.data})
+        return Response({"error": serializer.errors}, status=400)
     except Provider.DoesNotExist:
-        return Response({
-            "error": "Provider not found"
-        }, status=status.HTTP_404_NOT_FOUND)
-
-    serializer = ProviderSerializer(provider, data=request.data)
-
-    if serializer.is_valid():
-        serializer.save()
-        return Response({
-            "message": "Provider updated successfully",
-            "data": serializer.data
-        })
-
-    return Response({
-        "error": serializer.errors
-    }, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Provider not found"}, status=404)
 
 
-# ----------------------------------------
-# DELETE PROVIDER
-# API: DELETE /api/providers/:id
-# ----------------------------------------
 @api_view(['DELETE'])
 def delete_provider(request, id):
-    """
-    Delete a provider by ID
-    """
-
     try:
         provider = Provider.objects.get(id=id)
         provider.delete()
-
-        return Response({
-            "message": "Provider deleted successfully"
-        })
-
+        return Response({"message": "Provider deleted"})
     except Provider.DoesNotExist:
-        return Response({
-            "error": "Provider not found"
-        }, status=status.HTTP_404_NOT_FOUND)
+        return Response({"error": "Provider not found"}, status=404)
 
 
-# =========================================================
-# 🔹 OPTIONAL (VERY USEFUL FOR FRONTEND)
-# =========================================================
+# -------------------------
+# Provider Status & Actions
+# -------------------------
 
-# ----------------------------------------
-# GET ALL SERVICES
-# API: GET /api/services
-# ----------------------------------------
+@api_view(['PATCH'])
+def save_wa_sent(request, provider_id):
+    user_id = request.data.get('user_id')
+    status_obj, created = ProviderStatus.objects.get_or_create(provider_id=provider_id, user_id=user_id)
+    status_obj.wa_sent = True
+    status_obj.save()
+    return Response({'message': 'WhatsApp status updated'})
+
+
+@api_view(['PATCH'])
+def save_provider_response(request, provider_id):
+    user_id = request.data.get('user_id')
+    availability = request.data.get('availability')
+    status_obj, created = ProviderStatus.objects.get_or_create(provider_id=provider_id, user_id=user_id)
+    status_obj.availability = availability
+    status_obj.save()
+    return Response({'message': 'Response saved'})
+
+
+@api_view(['PATCH'])
+def confirm_provider(request, provider_id):
+    user_id = request.data.get('user_id')
+    status_obj, created = ProviderStatus.objects.get_or_create(provider_id=provider_id, user_id=user_id)
+    status_obj.confirmed = True
+    status_obj.save()
+    return Response({'message': 'Provider confirmed'})
+
+
 @api_view(['GET'])
-def get_services(request):
-    """
-    Fetch all services (used in AdminServices UI)
-    """
-
-    services = Service.objects.all().order_by('-id')
-    serializer = ServiceSerializer(services, many=True)
-
+def get_provider_status(request):
+    user_id = request.query_params.get('user_id')
+    statuses = ProviderStatus.objects.filter(user_id=user_id)
+    serializer = ProviderStatusSerializer(statuses, many=True)
     return Response(serializer.data)
 
 
-# ----------------------------------------
-# GET ALL PROVIDERS
-# API: GET /api/providers
-# ----------------------------------------
 @api_view(['GET'])
-def get_providers(request):
-    """
-    Fetch all providers (used in AdminProviders UI)
-    """
+def respond_via_link(request):
+    provider_id = request.query_params.get('provider')
+    status_val = request.query_params.get('status')
+    user_id = request.query_params.get('user')
 
-    providers = Provider.objects.all().order_by('-id')
-    serializer = ProviderSerializer(providers, many=True)
+    if not provider_id or not status_val or not user_id:
+        return Response({'error': 'Missing data'}, status=400)
 
+    try:
+        status_obj = ProviderStatus.objects.get(provider_id=provider_id, user_id=user_id)
+        status_obj.availability = status_val
+        status_obj.save()
+        return HttpResponse("<h2>✅ Response recorded. Thank you!</h2>")
+    except ProviderStatus.DoesNotExist:
+        return Response({'error': 'No record found'}, status=404)
+
+
+# -------------------------
+# Addresses
+# -------------------------
+
+@api_view(['GET'])
+def get_all_addresses(request):
+    addresses = Address.objects.all()
+    serializer = AddressSerializer(addresses, many=True)
     return Response(serializer.data)
+
+
+@api_view(['POST'])
+def create_address(request):
+    serializer = AddressSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
+
+
+@api_view(['GET'])
+def get_user_addresses(request, user_id):
+    addresses = Address.objects.filter(user_id=user_id)
+    serializer = AddressSerializer(addresses, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+def address_detail(request, pk):
+    try:
+        address = Address.objects.get(pk=pk)
+    except Address.DoesNotExist:
+        return Response(status=404)
+
+    if request.method == 'GET':
+        return Response(AddressSerializer(address).data)
+    elif request.method == 'PUT':
+        serializer = AddressSerializer(address, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+    elif request.method == 'DELETE':
+        address.delete()
+        return Response(status=204)
+
+
+# -------------------------
+# Bookings
+# -------------------------
+
+@api_view(['POST'])
+def create_booking(request):
+    serializer = BookingSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)

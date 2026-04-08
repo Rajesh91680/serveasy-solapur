@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   User,
@@ -17,21 +17,29 @@ import {
 } from "lucide-react";
 import { Navbar } from "../../Navbar";
 import { Footer } from "../../Footer";
-import {
-  getCurrentUser,
-  setCurrentUser,
-  getBookings,
-  getUsers,
-  saveUsers,
-  getProviders,
-  addUserAddress,
-  setDefaultAddress,
-  getDefaultAddress,
-} from "../../../services/store";
+import axios from "axios";
+
+const API_URL = "http://127.0.0.1:8000/api/";
+
+const getCurrentUser = () => {
+  const user = sessionStorage.getItem("currentUser");
+  return user ? JSON.parse(user) : null;
+};
+
+const setCurrentUser = (user) => {
+  if (user) {
+    sessionStorage.setItem("currentUser", JSON.stringify(user));
+  } else {
+    sessionStorage.removeItem("currentUser");
+  }
+};
 
 export function UserProfile() {
   const navigate = useNavigate();
-  const currentUser = getCurrentUser();
+  const [currentUser, setLocalCurrentUser] = useState(getCurrentUser());
+  const [providers, setProviders] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [addresses, setAddresses] = useState([]);
 
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(currentUser?.name || "");
@@ -48,57 +56,76 @@ export function UserProfile() {
   const [area, setArea] = useState("");
   const [pinCode, setPinCode] = useState("");
 
-  if (!currentUser) {
-    setTimeout(() => {
-      if (!getCurrentUser()) navigate("/");
-    }, 0);
-    return null;
-  }
+  useEffect(() => {
+    const fetchUserData = async () => {
+      const user = getCurrentUser();
+      if (!user) {
+        navigate("/");
+        return;
+      }
 
-  const refreshedUser = getCurrentUser();
-  const userBookings = getBookings().filter((b) => b.userId === refreshedUser.id);
-  const allProviders = getProviders();
-  const userAddresses = Array.isArray(refreshedUser.addresses) ? refreshedUser.addresses : [];
-  const defaultAddress = getDefaultAddress(refreshedUser);
+      try {
+        // 1. Fetch user profile
+        const userRes = await axios.get(`${API_URL}users/${user.id}/`);
+        setLocalCurrentUser(userRes.data);
+        setCurrentUser(userRes.data);
+        setName(userRes.data.name);
+        setPhone(userRes.data.phone);
+
+        // 2. Fetch addresses
+        const addrRes = await axios.get(`${API_URL}addresses/user/${user.id}/`);
+        setAddresses(addrRes.data);        // 3. Fetch all providers (needed for booking phone numbers)
+        const provRes = await axios.get(`${API_URL}providers/`);
+        // setProviders(provRes.data);
+
+        // 4. Fetch bookings
+        try {
+          const bookRes = await axios.get(`${API_URL}users/${user.id}/bookings/`);
+          setBookings(bookRes.data);
+        } catch (e) {
+          setBookings([]);
+        }
+
+      } catch (err) {
+        console.error("Failed to fetch user data:", err);
+      }
+    };
+
+    fetchUserData();
+  }, [navigate]);
+
+  if (!currentUser) return null;
+
+  const userBookings = bookings;
+  const userAddresses = addresses;
+  const defaultAddress = userAddresses.find(a => a.is_default);
 
   const cityOptions = ["Solapur", "Pune", "Mumbai"];
   const areaOptions = [
-    "Vijapur Road",
-    "Hotgi Road",
-    "Akkalkot Road",
-    "Datta Nagar",
-    "Railway Lines",
-    "Budhwar Peth",
-    "Sakhar Peth",
-    "Siddheshwar Peth",
-    "Mangalwar Peth",
-    "Shivaji Nagar",
-    "Kambar Ali",
-    "Murarji Peth",
-    "Jule Solapur",
+    "Vijapur Road", "Hotgi Road", "Akkalkot Road", "Datta Nagar", "Railway Lines", "Budhwar Peth",
+    "Sakhar Peth", "Siddheshwar Peth", "Mangalwar Peth", "Shivaji Nagar", "Kambar Ali",
+    "Murarji Peth", "Jule Solapur",
   ];
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim()) return;
     if (!/^\d{10}$/.test(phone.trim())) return;
 
-    const users = getUsers();
-    const updatedUsers = users.map((u) =>
-      u.id === refreshedUser.id ? { ...u, name: name.trim(), phone: phone.trim() } : u
-    );
+    try {
+      const res = await axios.put(`${API_URL}users/${currentUser.id}/`, {
+        name: name.trim(),
+        phone: phone.trim(),
+        email: currentUser.email,
+      });
 
-    saveUsers(updatedUsers);
-
-    const updatedCurrentUser = {
-      ...refreshedUser,
-      name: name.trim(),
-      phone: phone.trim(),
-    };
-
-    setCurrentUser(updatedCurrentUser);
-    setEditing(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+      setCurrentUser(res.data);
+      setLocalCurrentUser(res.data);
+      setEditing(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      alert("Failed to update profile.");
+    }
   };
 
   const handleLogout = () => {
@@ -107,65 +134,51 @@ export function UserProfile() {
   };
 
   const resetAddressForm = () => {
-    setTitle("");
-    setLine1("");
-    setCity("");
-    setArea("");
-    setPinCode("");
-    setAddressError("");
+    setTitle(""); setLine1(""); setCity(""); setArea(""); setPinCode(""); setAddressError("");
   };
 
-  const handleAddAddress = () => {
+  const handleAddAddress = async () => {
     setAddressError("");
 
-    if (!title.trim()) {
-      setAddressError("Address title is required.");
+    if (!title.trim() || !line1.trim() || !city.trim() || !area.trim() || !/^\d{6}$/.test(pinCode.trim())) {
+      setAddressError("Please fill all fields correctly.");
       return;
     }
 
-    if (!line1.trim()) {
-      setAddressError("Address Line 1 is required.");
-      return;
+    try {
+      const res = await axios.post(`${API_URL}users/${currentUser.id}/addresses/`, {
+        user: currentUser.id,
+        address_type: title.trim().toLowerCase(),
+        address_line1: line1.trim(),
+        city: city.trim(),
+        area: area.trim(),
+        pincode: pinCode.trim(),
+        is_default: userAddresses.length === 0,
+      });
+
+      setAddresses([...userAddresses, res.data]);
+      setAddressSaved(true);
+      setShowAddressForm(false);
+      resetAddressForm();
+      setTimeout(() => setAddressSaved(false), 2000);
+    } catch (err) {
+      setAddressError("Failed to save address.");
     }
-
-    if (line1.trim().length < 5) {
-      setAddressError("Address Line 1 is too short.");
-      return;
-    }
-
-    if (!city.trim()) {
-      setAddressError("Please select city.");
-      return;
-    }
-
-    if (!area.trim()) {
-      setAddressError("Please select area.");
-      return;
-    }
-
-    if (!/^\d{6}$/.test(pinCode.trim())) {
-      setAddressError("Pin Code must be 6 digits.");
-      return;
-    }
-
-    addUserAddress(refreshedUser.id, {
-      title: title.trim(),
-      line1: line1.trim(),
-      city: city.trim(),
-      area: area.trim(),
-      pinCode: pinCode.trim(),
-    });
-
-    setAddressSaved(true);
-    setShowAddressForm(false);
-    resetAddressForm();
-    setTimeout(() => setAddressSaved(false), 2000);
   };
 
-  const handleSetDefaultAddress = (addressId) => {
-    setDefaultAddress(refreshedUser.id, addressId);
-    setAddressSaved(true);
-    setTimeout(() => setAddressSaved(false), 2000);
+  const handleSetDefaultAddress = async (addressId) => {
+    try {
+      const addrRes = await axios.get(`${API_URL}addresses/user/${currentUser.id}/`);
+      const updated = userAddresses.map(a => ({
+        ...a,
+        is_default: a.id === addressId
+      }));
+      setAddresses(updated);
+      setAddressSaved(true);
+      setTimeout(() => setAddressSaved(false), 2000);
+    } catch (err) {
+      alert("Failed to set default address.");
+    }
   };
 
   return (
@@ -184,7 +197,7 @@ export function UserProfile() {
                   className="w-20 h-20 rounded-full flex items-center justify-center font-bold text-white text-3xl mb-3"
                   style={{ background: "#1A3C6E" }}
                 >
-                  {refreshedUser.name[0].toUpperCase()}
+                  {currentUser.name?.[0]?.toUpperCase() || "U"}
                 </div>
 
                 {saved && (
@@ -246,8 +259,8 @@ export function UserProfile() {
                     <button
                       onClick={() => {
                         setEditing(false);
-                        setName(refreshedUser.name);
-                        setPhone(refreshedUser.phone);
+                        setName(currentUser.name);
+                        setPhone(currentUser.phone);
                       }}
                       className="flex-1 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-1"
                       style={{ background: "#F1F5F9", color: "#64748B" }}
@@ -260,13 +273,13 @@ export function UserProfile() {
               ) : (
                 <div className="space-y-3 mb-4">
                   {[
-                    { i: <User className="w-4 h-4" />, l: "Name", v: refreshedUser.name },
-                    { i: <Mail className="w-4 h-4" />, l: "Email", v: refreshedUser.email },
-                    { i: <Phone className="w-4 h-4" />, l: "Phone", v: refreshedUser.phone || "—" },
+                    { i: <User className="w-4 h-4" />, l: "Name", v: currentUser.name },
+                    { i: <Mail className="w-4 h-4" />, l: "Email", v: currentUser.email },
+                    { i: <Phone className="w-4 h-4" />, l: "Phone", v: currentUser.phone || "—" },
                     {
                       i: <Calendar className="w-4 h-4" />,
                       l: "Member Since",
-                      v: refreshedUser.createdAt,
+                      v: currentUser.createdAt || "N/A",
                     },
                   ].map((x) => (
                     <div key={x.l} className="flex items-center gap-3">
@@ -339,12 +352,12 @@ export function UserProfile() {
                   </div>
 
                   <div className="text-xs font-semibold mb-1" style={{ color: "#F97316" }}>
-                    {defaultAddress.title || "Address"}
+                    {defaultAddress.address_type?.toUpperCase() || "ADDRESS"}
                   </div>
                   <div className="text-sm" style={{ color: "#374151", lineHeight: 1.5 }}>
-                    {defaultAddress.line1}
+                    {defaultAddress.address_line1}
                     <br />
-                    {defaultAddress.area}, {defaultAddress.city} - {defaultAddress.pinCode}
+                    {defaultAddress.area}, {defaultAddress.city} - {defaultAddress.pincode}
                   </div>
                 </div>
               ) : (
@@ -467,12 +480,12 @@ export function UserProfile() {
                           <MapPin className="w-4 h-4 mt-0.5" style={{ color: "#1A3C6E" }} />
                           <div>
                             <div className="text-sm font-bold" style={{ color: "#1F2937" }}>
-                              {addr.title || "Address"}
+                              {addr.address_type?.toUpperCase() || "ADDRESS"}
                             </div>
                             <div className="text-xs mt-1" style={{ color: "#6B7280", lineHeight: 1.5 }}>
-                              {addr.line1}
+                              {addr.address_line1}
                               <br />
-                              {addr.area}, {addr.city} - {addr.pinCode}
+                              {addr.area}, {addr.city} - {addr.pincode}
                             </div>
                           </div>
                         </div>
@@ -665,7 +678,7 @@ export function UserProfile() {
 
                           <div className="space-y-4">
                             {b.providers.map((pName) => {
-                              const pEntry = allProviders.find((px) => px.name === pName);
+                              const pEntry = providers.find((px) => px.name === pName);
 
                               return (
                                 <div

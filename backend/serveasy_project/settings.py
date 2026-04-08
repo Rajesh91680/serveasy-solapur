@@ -25,8 +25,11 @@ SECRET_KEY = 'django-insecure-6k=2_82et=fe+%on7is=f1p!)05etgv#+w!imbfqy^jx!qaa6#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = [
+    '127.0.0.1',
+    'localhost',
+    'unmurmured-hermine-turgent.ngrok-free.dev'
+]
 
 # Application definition
 
@@ -40,10 +43,12 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'api_core',
+    
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware', 
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -130,3 +135,9 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOW_ALL_ORIGINS = True
 
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'serveasy9app@gmail.com'
+EMAIL_HOST_PASSWORD = 'jmym fhjj borx sbap'

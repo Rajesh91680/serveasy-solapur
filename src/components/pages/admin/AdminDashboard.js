@@ -49,8 +49,8 @@ function AdminDashboard() {
     status === "completed"
       ? { bg: "#DCFCE7", text: "#166534" }
       : status === "confirmed"
-      ? { bg: "#DBEAFE", text: "#1E40AF" }
-      : { bg: "#FEE2E2", text: "#991B1B" };
+        ? { bg: "#DBEAFE", text: "#1E40AF" }
+        : { bg: "#FEE2E2", text: "#991B1B" };
 
   return (
     <div>
